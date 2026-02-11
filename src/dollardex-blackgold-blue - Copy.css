@@ -1,0 +1,370 @@
+/* ========================================================================
+   DollarDex — SAFE Premium Black / Gold / Blue
+   - No overlays
+   - No pointer-event tricks
+   - Only fixed layer: NAV
+   ======================================================================== */
+
+/* ===== TEMP DEBUG (keep if needed) ===== */
+.ddx-mobileOverlay,
+.ddx-sheetOverlay,
+.ddx-mobileBackdrop,
+.ddx-sheetOverlay::before,
+.ddx-sheetOverlay::after {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* ===== Brand tokens ===== */
+:root{
+  --ddx-gold: 246, 208, 122;
+  --ddx-gold2: 182, 135, 43;
+  --ddx-blue: 79, 140, 255;
+
+  --border: rgba(255,255,255,.10);
+  --shadow: 0 18px 60px rgba(0,0,0,.55);
+}
+
+/* ===== Theme tokens ===== */
+html[data-theme="dark"],
+html[data-theme="dim"],
+html[data-theme="light"]{
+  --accent1: var(--ddx-gold);
+  --accent2: var(--ddx-blue);
+}
+
+html[data-theme="dark"]{
+  --bg0:#060607;
+  --bg1:#0b0b0f;
+  --card: rgba(255,255,255,.06);
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.70);
+}
+
+html[data-theme="dim"]{
+  --bg0:#070814;
+  --bg1:#0b0d18;
+  --card: rgba(255,255,255,.065);
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.72);
+}
+
+html[data-theme="light"]{
+  --bg0:#fbf7ef;
+  --bg1:#ffffff;
+  --card: rgba(0,0,0,.035);
+  --border: rgba(0,0,0,.10);
+  --shadow: 0 18px 60px rgba(0,0,0,.10);
+  --text: rgba(0,0,0,.88);
+  --muted: rgba(0,0,0,.62);
+}
+
+/* ===== Global background ===== */
+html, body, #root {
+  min-height: 100%;
+  height: auto;
+}
+
+body{
+  margin: 0;
+  background:
+    radial-gradient(1200px 800px at 10% 10%, rgba(var(--accent1), .16), transparent 60%),
+    radial-gradient(1200px 800px at 90% 20%, rgba(var(--accent2), .14), transparent 60%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+  color: var(--text);
+}
+
+/* ===== Layout helpers ===== */
+.wrap{
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.grid{ display:grid; gap:18px; }
+.grid-3{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 981px){
+  .grid-3{ grid-template-columns: 1fr; }
+}
+
+/* ========================================================================
+   NAVBAR (ONLY FIXED LAYER)
+   ======================================================================== */
+
+.nav{
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 999999;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(0,0,0,.50), rgba(0,0,0,.10));
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+html[data-theme="light"] .nav{
+  background: linear-gradient(180deg, rgba(255,255,255,.86), rgba(255,255,255,.55));
+}
+
+.nav-inner{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  flex-wrap: wrap;
+}
+
+.nav-left,
+.nav-right{
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Ensure nav is always clickable */
+.nav *{
+  pointer-events: auto;
+}
+
+/* ========================================================================
+   CHIPS / BUTTONS
+   ======================================================================== */
+
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform .08s ease,
+    background .12s ease,
+    box-shadow .12s ease,
+    border-color .12s ease;
+}
+
+.chip:hover{
+  transform: translateY(-1px);
+}
+
+.chip.is-active{
+  border-color: rgba(var(--ddx-gold), .28);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--ddx-gold), .18),
+      rgba(var(--ddx-gold), .06)
+    );
+  box-shadow:
+    0 0 0 1px rgba(var(--ddx-gold), .10),
+    0 14px 42px rgba(0,0,0,.35);
+}
+
+/* Theme dot */
+.dot{
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent2), .90);
+  box-shadow: 0 0 18px rgba(var(--accent2), .25);
+}
+
+/* ========================================================================
+   CARDS
+   ======================================================================== */
+
+.card{
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+html[data-theme="light"] .card{
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.72));
+}
+
+/* ========================================================================
+   HERO
+   ======================================================================== */
+
+.ddx-hero{
+  margin-top: 96px; /* offset fixed nav */
+  padding: 22px;
+  border-radius: 22px;
+  border: 1px solid rgba(var(--ddx-gold), .16);
+  background:
+    radial-gradient(900px 520px at 20% 0%, rgba(var(--ddx-gold), .18), transparent 60%),
+    radial-gradient(900px 520px at 90% 20%, rgba(var(--ddx-blue), .18), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+}
+
+.ddx-hero::before{
+  content:"";
+  position:absolute;
+  inset: -40px -60px auto auto;
+  width: 360px;
+  height: 360px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(var(--ddx-gold), .35), transparent 65%),
+    radial-gradient(circle at 70% 70%, rgba(var(--ddx-blue), .25), transparent 68%);
+  pointer-events:none;
+  opacity:.85;
+}
+
+/* ========================================================================
+   TYPOGRAPHY
+   ======================================================================== */
+
+.ddx-heroEyebrow{
+  font-size: 11.5px;
+  font-weight: 900;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ddx-heroTitle{
+  margin: 10px 0 0;
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.7px;
+  font-weight: 1000;
+}
+
+.ddx-heroTitle span{
+  background: linear-gradient(
+    135deg,
+    rgba(var(--ddx-gold), .95),
+    rgba(var(--ddx-blue), .85)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ddx-heroLead{
+  margin: 10px 0 0;
+  max-width: 62ch;
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+html[data-theme="light"] .ddx-heroLead{
+  color: rgba(0,0,0,.64);
+}
+
+/* ========================================================================
+   MISC
+   ======================================================================== */
+
+.small{
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.ddx-amount{
+  font-weight: 1000;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  margin-top: 6px;
+}
+
+/* Prevent stacking issues */
+#root, .yf-luxe{
+  position: relative;
+  z-index: 0;
+}
+
+/* ========================================================================
+   STEP 1 — NAV ACTIVE POLISH (chips + theme)
+   ======================================================================== */
+
+/* Smooth micro feel */
+.chip{
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Make active chip look premium (route + selected theme) */
+.chip.is-active{
+  border-color: rgba(var(--ddx-gold), .34);
+  background:
+    radial-gradient(140px 90px at 20% 30%, rgba(var(--ddx-gold), .18), transparent 60%),
+    radial-gradient(160px 110px at 80% 70%, rgba(var(--ddx-blue), .14), transparent 62%),
+    rgba(255,255,255,.04);
+  box-shadow:
+    0 0 0 1px rgba(var(--ddx-gold), .14),
+    0 14px 42px rgba(0,0,0,.38);
+}
+
+/* Slightly “lift” active without moving layout */
+.chip.is-active:hover{
+  transform: translateY(-1px);
+}
+
+/* Better focus ring (keyboard navigation) */
+.chip:focus-visible{
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(var(--ddx-blue), .30),
+    0 0 0 1px rgba(var(--ddx-gold), .12),
+    0 16px 46px rgba(0,0,0,.40);
+}
+
+/* Make the theme dot show the currently selected theme more clearly */
+.chip.is-active .dot{
+  background: rgba(var(--ddx-gold), .95);
+  box-shadow: 0 0 18px rgba(var(--ddx-gold), .25);
+}
+
+/* Light theme tune: reduce heavy shadow */
+html[data-theme="light"] .chip.is-active{
+  box-shadow:
+    0 0 0 1px rgba(var(--ddx-gold), .16),
+    0 12px 28px rgba(0,0,0,.10);
+}
+
+/* ========================================================================
+   STEP 3 — DASHBOARD BALANCE (2-column, stacked right rail)
+   ======================================================================== */
+
+/* Use this wrapper on app pages so content doesn't hide behind fixed nav */
+.ddx-page{
+  padding-top: 96px; /* same idea as ddx-hero offset */
+}
+
+/* Two-column premium grid */
+.ddx-dashboardGrid{
+  display: grid;
+  grid-template-columns: 1.25fr 0.95fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1024px){
+  .ddx-dashboardGrid{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Column stacks */
+.ddx-col{
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}

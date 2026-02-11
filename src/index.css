@@ -1,0 +1,158 @@
+/* src/index.css
+==============================================================================
+DollarDex — Global Typography & Base Normalization (STEP 12)
+- Ensures ALL pages (Landing, Dashboard, Referral, Network) share same fonts
+- Fixes mismatched headings, body, inputs, buttons, tables
+- Does NOT change your theme tokens; works with data-theme dark/dim/light
+==============================================================================
+*/
+
+/* If you already import fonts elsewhere, keep this file anyway—this makes usage consistent. */
+@import url("./luxury-fonts.css");
+
+/* ===== Reset / base ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* ===== Global font system =====
+   We don’t hardcode a random font.
+   We rely on your existing luxury-fonts.css to define the preferred family.
+   If it doesn’t, this still gracefully falls back.
+*/
+:root {
+  /* Primary UI font */
+  --ddx-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+
+  /* Monospace (addresses, hashes) */
+  --ddx-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Typography rhythm */
+  --ddx-radius: 18px;
+}
+
+/* Ensure themes still work */
+html[data-theme="dark"],
+html[data-theme="dim"],
+html[data-theme="light"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--ddx-font);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Make all interactive elements inherit the same font */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Links inherit color, you already style via chip/nav */
+a {
+  color: inherit;
+}
+
+/* Headings unified (prevents random huge/ugly defaults on some pages) */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--ddx-font);
+  font-weight: 1000;
+  letter-spacing: -0.4px;
+}
+
+/* Default paragraph spacing */
+p {
+  margin: 0;
+}
+
+/* Your mono class must always look consistent */
+.mono {
+  font-family: var(--ddx-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Tables: prevent mixed fonts and inconsistent spacing */
+table {
+  font-family: var(--ddx-font);
+  border-collapse: collapse;
+}
+
+th,
+td {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Inputs: ensure premium feel without changing your theme */
+input,
+textarea,
+select {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  padding: 12px 12px;
+  outline: none;
+}
+
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* Placeholder consistency */
+input::placeholder,
+textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* Buttons: keep your existing .btn styles, just normalize baseline */
+button {
+  border: none;
+  background: none;
+}
+
+/* Reduce accidental “tight” text rendering differences */
+small,
+.small {
+  font-family: var(--ddx-font);
+}
+
+/* Ensure root height is stable */
+html,
+body,
+#root {
+  min-height: 100%;
+}
