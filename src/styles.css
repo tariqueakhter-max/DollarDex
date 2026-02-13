@@ -1,540 +1,475 @@
+/* src/styles.css
+==============================================================================
+DollarDex — Single Global Styles (Premium Dark/Dim/Light)
+- Light theme is premium cream (NOT pure white) and fully readable
+- Cards/chips/buttons always visible in Light
+- NavBar is NON-sticky / NON-fixed (scrolls away naturally)
+- Includes NetworkGuard styles (ddx-guard*)
+==============================================================================
+*/
 
-:root {
-  /* default theme if nothing set */
-  --bg0: #070911;
-  --bg1: #0b1020;
+/* ========= Brand ========= */
+:root{
+  --ddx-gold: 246, 208, 122;   /* #f6d07a */
+  --ddx-gold2: 182, 135, 43;   /* #b6872b */
+  --ddx-blue: 79, 140, 255;    /* #4f8cff */
+  --ddx-pink: 255, 88, 198;    /* #ff58c6 */
 
-  --surface: rgba(255, 255, 255, 0.06);
-  --surface2: rgba(255, 255, 255, 0.035);
-  --border: rgba(255, 255, 255, 0.10);
-  --border2: rgba(255, 255, 255, 0.07);
+  --wrap: min(1120px, calc(100% - 32px));
+  --radius-card: 18px;
+  --radius-chip: 999px;
 
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.72);
-  --muted2: rgba(255, 255, 255, 0.60);
+  /* defaults (dark fallback) */
+  --bg0: #060607;
+  --bg1: #0b0b0f;
 
-  --shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
-  --glow: 0 0 60px rgba(255, 88, 198, 0.12);
+  --cardA: rgba(255,255,255,.06);
+  --cardB: rgba(255,255,255,.03);
 
-  --accent: rgba(255, 88, 198, 0.95);
-  --accent2: rgba(142, 133, 255, 0.85);
-  --danger: rgba(255, 107, 107, 0.95);
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.70);
+  --muted2: rgba(255,255,255,.58);
 
-  --chipBg: rgba(255, 255, 255, 0.05);
-  --chipBd: rgba(255, 255, 255, 0.10);
+  --border: rgba(255,255,255,.10);
+  --border2: rgba(255,255,255,.08);
 
-  --btnBg: rgba(255, 255, 255, 0.06);
-  --btnBd: rgba(255, 255, 255, 0.12);
-  --btnText: rgba(255, 255, 255, 0.90);
+  --shadow: 0 18px 60px rgba(0,0,0,.55);
 
-  --inputBg: rgba(255, 255, 255, 0.06);
-  --inputBd: rgba(255, 255, 255, 0.12);
-  --inputText: rgba(255, 255, 255, 0.92);
-  --placeholder: rgba(255, 255, 255, 0.42);
-
-  --tableHead: rgba(255, 255, 255, 0.07);
-  --tableRow: rgba(255, 255, 255, 0.03);
-  --tableRowHover: rgba(255, 255, 255, 0.06);
+  --accent1: var(--ddx-gold);
+  --accent2: var(--ddx-blue);
 }
 
-/* ---------------------------
-   DIM (cinema / softer)
-   --------------------------- */
-html[data-theme="dim"] {
-  --bg0: #060812;
-  --bg1: #090d1a;
-
-  --surface: rgba(255, 255, 255, 0.055);
-  --surface2: rgba(255, 255, 255, 0.030);
-  --border: rgba(255, 255, 255, 0.095);
-  --border2: rgba(255, 255, 255, 0.065);
-
-  --text: rgba(255, 255, 255, 0.88);
-  --muted: rgba(255, 255, 255, 0.66);
-  --muted2: rgba(255, 255, 255, 0.56);
-
-  --shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
-  --glow: 0 0 60px rgba(255, 88, 198, 0.10);
-
-  --chipBg: rgba(255, 255, 255, 0.045);
-  --chipBd: rgba(255, 255, 255, 0.09);
-
-  --btnBg: rgba(255, 255, 255, 0.055);
-  --btnBd: rgba(255, 255, 255, 0.105);
-
-  --inputBg: rgba(255, 255, 255, 0.055);
-  --inputBd: rgba(255, 255, 255, 0.11);
-
-  --tableHead: rgba(255, 255, 255, 0.06);
-  --tableRow: rgba(255, 255, 255, 0.028);
-  --tableRowHover: rgba(255, 255, 255, 0.055);
+/* ========= Theme tokens ========= */
+html[data-theme="dark"]{
+  --bg0: #060607;
+  --bg1: #0b0b0f;
+  --cardA: rgba(255,255,255,.06);
+  --cardB: rgba(255,255,255,.03);
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.70);
+  --muted2: rgba(255,255,255,.58);
+  --border: rgba(255,255,255,.10);
+  --border2: rgba(255,255,255,.08);
+  --shadow: 0 18px 60px rgba(0,0,0,.55);
 }
 
-/* ---------------------------
-   DARK (lights on, clear)
-   --------------------------- */
-html[data-theme="dark"] {
-  --bg0: #070a14;
-  --bg1: #0b1225;
-
-  /* Make surfaces brighter + clearer */
-  --surface: rgba(255, 255, 255, 0.10);
-  --surface2: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.14);
-  --border2: rgba(255, 255, 255, 0.10);
-
-  --text: rgba(255, 255, 255, 0.95);
-  --muted: rgba(255, 255, 255, 0.78);
-  --muted2: rgba(255, 255, 255, 0.66);
-
-  --shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
-  --glow: 0 0 80px rgba(255, 88, 198, 0.14);
-
-  --chipBg: rgba(255, 255, 255, 0.08);
-  --chipBd: rgba(255, 255, 255, 0.14);
-
-  --btnBg: rgba(255, 255, 255, 0.09);
-  --btnBd: rgba(255, 255, 255, 0.16);
-
-  --inputBg: rgba(255, 255, 255, 0.085);
-  --inputBd: rgba(255, 255, 255, 0.16);
-
-  --tableHead: rgba(255, 255, 255, 0.10);
-  --tableRow: rgba(255, 255, 255, 0.05);
-  --tableRowHover: rgba(255, 255, 255, 0.085);
+html[data-theme="dim"]{
+  --bg0: #070814;
+  --bg1: #0b0d18;
+  --cardA: rgba(255,255,255,.065);
+  --cardB: rgba(255,255,255,.034);
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.72);
+  --muted2: rgba(255,255,255,.60);
+  --border: rgba(255,255,255,.10);
+  --border2: rgba(255,255,255,.085);
+  --shadow: 0 18px 60px rgba(0,0,0,.50);
 }
 
-/* ---------------------------
-   LIGHT (full “back light on”)
-   --------------------------- */
-html[data-theme="light"] {
-  --bg0: #f6f7fb;
-  --bg1: #eef1fb;
+/* ⭐ Premium Light (Cream + Contrast) */
+html[data-theme="light"]{
+  --bg0: #fbf6ea;   /* cream */
+  --bg1: #ffffff;
 
-  --surface: rgba(255, 255, 255, 0.92);
-  --surface2: rgba(255, 255, 255, 0.78);
-  --border: rgba(10, 20, 40, 0.12);
-  --border2: rgba(10, 20, 40, 0.08);
+  --cardA: rgba(255,255,255,.92);
+  --cardB: rgba(255,255,255,.78);
 
-  --text: rgba(10, 20, 40, 0.92);
-  --muted: rgba(10, 20, 40, 0.70);
-  --muted2: rgba(10, 20, 40, 0.56);
+  --text: rgba(10,12,18,.92);
+  --muted: rgba(10,12,18,.62);
+  --muted2: rgba(10,12,18,.52);
 
-  --shadow: 0 18px 60px rgba(20, 30, 60, 0.18);
-  --glow: 0 0 70px rgba(255, 88, 198, 0.10);
+  --border: rgba(10,12,18,.14);
+  --border2: rgba(10,12,18,.10);
 
-  --chipBg: rgba(10, 20, 40, 0.06);
-  --chipBd: rgba(10, 20, 40, 0.10);
-
-  --btnBg: rgba(10, 20, 40, 0.06);
-  --btnBd: rgba(10, 20, 40, 0.12);
-  --btnText: rgba(10, 20, 40, 0.92);
-
-  --inputBg: rgba(10, 20, 40, 0.06);
-  --inputBd: rgba(10, 20, 40, 0.14);
-  --inputText: rgba(10, 20, 40, 0.92);
-  --placeholder: rgba(10, 20, 40, 0.44);
-
-  --tableHead: rgba(10, 20, 40, 0.06);
-  --tableRow: rgba(10, 20, 40, 0.03);
-  --tableRowHover: rgba(10, 20, 40, 0.06);
+  --shadow: 0 18px 60px rgba(10,12,18,.12);
 }
 
-/* =========================================================
-   Base resets + body
-   ========================================================= */
-
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-
-body {
+/* ========= Base / reset ========= */
+*{ box-sizing: border-box; }
+html, body, #root{ height: 100%; }
+body{
   margin: 0;
-
-Arial, "Apple Color Emoji", "Segoe UI Emoji";
   color: var(--text);
-
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
   background:
-    radial-gradient(900px 600px at 15% 10%, rgba(255, 88, 198, 0.12), transparent 60%),
-    radial-gradient(900px 600px at 85% 20%, rgba(142, 133, 255, 0.10), transparent 55%),
+    radial-gradient(1100px 760px at 10% 10%, rgba(var(--accent1), .16), transparent 60%),
+    radial-gradient(1100px 760px at 90% 20%, rgba(var(--accent2), .14), transparent 60%),
     linear-gradient(180deg, var(--bg0), var(--bg1));
 }
 
-a { color: inherit; }
-b { font-weight: 900; }
+a{ color: inherit; }
 
-.yf-luxe {
-  min-height: 100vh;
-  padding-top: 78px; /* space for fixed nav */
-}
-
-.wrap {
-  width: min(1180px, calc(100% - 32px));
-  margin: 0 auto;
-}
-
-.small {
-  font-size: 12.5px;
-  color: var(--muted);
-  letter-spacing: 0.1px;
-}
-
-.mono {
+.wrap{ width: var(--wrap); margin: 0 auto; }
+.small{ font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.mono{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-/* =========================================================
-   NAV
-   ========================================================= */
+/* ========= App shell spacing ========= */
+.yf-luxe{
+  min-height: 100vh;
+}
 
-.nav {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 30;
-  background: linear-gradient(180deg, rgba(0,0,0,0.30), rgba(0,0,0,0.00));
-  backdrop-filter: blur(14px);
+/* ========= Nav (NON-sticky / NON-fixed) ========= */
+.nav{
+  position: static; /* scrolls away naturally */
   border-bottom: 1px solid var(--border2);
+  background: linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.10));
+  backdrop-filter: blur(12px);
+}
+html[data-theme="light"] .nav{
+  background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(255,255,255,.74));
+  box-shadow: 0 10px 30px rgba(10,12,18,.08);
 }
 
-html[data-theme="light"] .nav {
-  background: linear-gradient(180deg, rgba(255,255,255,0.70), rgba(255,255,255,0.00));
-}
-
-.nav-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.nav-inner{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   gap: 14px;
-  padding: 14px 0;
+  padding: 12px 0;
   flex-wrap: wrap;
 }
 
-.brand {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  font-weight: 950;
-  letter-spacing: -0.3px;
+/* Mobile nav tighter */
+@media (max-width: 560px){
+  .nav-inner{
+    padding: 8px 0;
+    gap: 10px;
+    flex-wrap: nowrap;
+  }
 }
 
-.brand .small { margin-top: 2px; }
-
-/* =========================================================
-   Theme Toggle
-   ========================================================= */
-
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 999px;
-  background: var(--chipBg);
-  border: 1px solid var(--chipBd);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.18);
-}
-
-.theme-pill {
-  appearance: none;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 900;
-  font-size: 12px;
-  cursor: pointer;
-  transition: transform .15s ease, background .15s ease, border-color .15s ease, color .15s ease;
-}
-
-.theme-pill:hover { transform: translateY(-1px); }
-.theme-pill.active {
-  color: var(--text);
-  background: linear-gradient(135deg, rgba(255,88,198,0.18), rgba(142,133,255,0.14));
-  border-color: rgba(255,88,198,0.22);
-  box-shadow: 0 0 24px rgba(255,88,198,0.10);
-}
-
-html[data-theme="light"] .theme-pill.active {
-  border-color: rgba(10,20,40,0.16);
-}
-
-/* =========================================================
-   Chips + buttons + inputs
-   ========================================================= */
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: var(--chipBg);
-  border: 1px solid var(--chipBd);
-  color: var(--text);
-  font-size: 12px;
-  user-select: none;
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 12px rgba(255,88,198,0.22);
-}
-
-.btn {
-  appearance: none;
-  border: 1px solid var(--btnBd);
-  background: var(--btnBg);
-  color: var(--btnText);
-  padding: 11px 14px;
-  border-radius: 14px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.20);
-}
-
-.btn:hover { transform: translateY(-1px); box-shadow: 0 16px 32px rgba(0,0,0,0.26); }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
-
-.btn.primary {
-  border-color: rgba(255,88,198,0.26);
-  background: linear-gradient(135deg, rgba(255,88,198,0.92), rgba(255,140,225,0.78), rgba(142,133,255,0.70));
-  color: #fff;
-  box-shadow: 0 16px 44px rgba(255,88,198,0.16), 0 14px 30px rgba(0,0,0,0.28);
-}
-
-html[data-theme="light"] .btn.primary { color: #fff; }
-
-input {
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--inputBd);
-  background: var(--inputBg);
-  color: var(--inputText);
-  outline: none;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
-}
-
-input::placeholder { color: var(--placeholder); font-weight: 700; }
-input:focus {
-  border-color: rgba(255,88,198,0.35);
-  box-shadow: 0 0 0 3px rgba(255,88,198,0.12);
-}
-
-/* =========================================================
-   Cards + headings
-   ========================================================= */
-
-.card {
-  background: linear-gradient(180deg, var(--surface), var(--surface2));
+/* ========= Cards ========= */
+.card{
+  border-radius: var(--radius-card);
   border: 1px solid var(--border);
-  border-radius: 22px;
+  background: linear-gradient(180deg, var(--cardA), var(--cardB));
+  box-shadow: var(--shadow);
   padding: 18px;
-  box-shadow: var(--shadow), var(--glow);
 }
 
-h1 {
-  margin: 0;
-  font-size: 44px;
-  letter-spacing: -0.9px;
-  line-height: 1.05;
-  text-shadow: 0 0 40px rgba(255,88,198,0.12);
+html[data-theme="light"] .card{
+  border-color: rgba(10,12,18,.14);
 }
 
-h3 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: -0.3px;
+/* ========= Chips ========= */
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 900;
 }
 
-/* =========================================================
-   Grid helpers
-   ========================================================= */
-
-.grid { display: grid; gap: 16px; }
-.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-
-@media (max-width: 980px) {
-  .grid-3 { grid-template-columns: 1fr; }
-  h1 { font-size: 36px; }
+html[data-theme="light"] .chip{
+  background: rgba(0,0,0,.04);
+  border-color: rgba(10,12,18,.16);
+  color: rgba(10,12,18,.92);
 }
 
-/* =========================================================
-   Tables
-   ========================================================= */
+/* active chip support (both naming styles) */
+.chip-active,
+.chip.is-active,
+.ddx-chipActive{
+  border-color: rgba(var(--ddx-gold2), .40) !important;
+  background: linear-gradient(135deg, rgba(var(--ddx-gold), .16), rgba(var(--ddx-blue), .12)) !important;
+  box-shadow: 0 10px 24px rgba(10,12,18,.10);
+}
 
-.table-wrap {
+/* Mobile: slightly smaller chips */
+@media (max-width: 560px){
+  .chip{
+    padding: 7px 10px;
+    font-size: 13px;
+    line-height: 1;
+  }
+}
+
+/* dot */
+.dot{
+  width: 8px; height: 8px;
+  border-radius: 999px;
+  background: rgba(var(--ddx-blue), .95);
+  box-shadow: 0 0 18px rgba(var(--ddx-blue), .22);
+}
+
+/* ========= Buttons ========= */
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap: 8px;
+  border-radius: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 900;
+  transition: transform .10s ease, background .12s ease, box-shadow .12s ease, opacity .12s ease;
+  text-decoration:none;
+}
+
+.btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.06); }
+.btn:disabled{ opacity: .55; cursor: not-allowed; transform: none; }
+
+html[data-theme="light"] .btn{
+  background: rgba(0,0,0,.04);
+  border-color: rgba(10,12,18,.16);
+  color: rgba(10,12,18,.92);
+}
+
+.btn.primary{
+  border: 1px solid rgba(var(--ddx-gold2), .40);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--ddx-gold), .98),
+    rgba(var(--ddx-gold2), .92),
+    rgba(var(--ddx-blue), .78)
+  );
+  color: rgba(14,10,6,.96);
+  box-shadow: 0 14px 42px rgba(var(--ddx-gold), .26);
+}
+.btn.primary:hover{
+  box-shadow: 0 18px 52px rgba(var(--ddx-gold), .32);
+}
+
+/* ========= Inputs ========= */
+input, textarea, select{
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--border2);
+  background: rgba(255,255,255,.035);
+  color: var(--text);
+  padding: 12px 12px;
+  outline: none;
+}
+input::placeholder, textarea::placeholder{ color: rgba(255,255,255,.42); }
+
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select{
+  background: rgba(0,0,0,.03);
+  border-color: rgba(10,12,18,.16);
+  color: rgba(10,12,18,.92);
+}
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder{
+  color: rgba(10,12,18,.45);
+}
+
+/* ========= Tables ========= */
+.table-wrap{
   width: 100%;
   overflow: auto;
   border-radius: 16px;
   border: 1px solid var(--border2);
-  background: rgba(0,0,0,0.10);
+  background: rgba(255,255,255,.02);
 }
-
-html[data-theme="light"] .table-wrap {
-  background: rgba(10,20,40,0.02);
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-thead th {
+table{ width: 100%; border-collapse: collapse; min-width: 720px; }
+thead th{
   text-align: left;
   font-size: 12px;
-  letter-spacing: 0.10em;
   color: var(--muted);
-  padding: 12px 12px;
-  background: var(--tableHead);
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border2);
-}
-
-tbody td {
-  padding: 12px 12px;
-  border-bottom: 1px solid var(--border2);
-  background: var(--tableRow);
-}
-
-tbody tr:hover td {
-  background: var(--tableRowHover);
-}
-
-/* =========================================================
-   Subtle transitions between themes
-   ========================================================= */
-html, body, .card, .chip, .btn, input, .table-wrap {
-  transition: background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
-}
-
-/* ===========================
-   DollarDex Luxury UI Patch
-   Paste at END of AppStyles()
-   =========================== */
-
-/* 1) Better global typography + smoother rendering */
-body{
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: geometricPrecision;
-  letter-spacing: 0.1px;
-  line-height: 1.45;
-  font-size: 16px;
-}
-
-/* 2) Wider container on desktop (more “big side by side”) */
-.wrap{
-  width: min(1240px, calc(100% - 32px)); /* was 1120px */
-}
-
-/* 3) Stronger hierarchy */
-h1{
-  font-size: 46px;          /* was 36px */
-  line-height: 1.06;
-  letter-spacing: -1px;
-}
-h3{
-  font-size: 20px;          /* was 18px */
-  letter-spacing: -0.35px;
-}
-.small{
-  font-size: 13.5px;        /* was 12.5px */
-  line-height: 1.5;
-}
-
-/* 4) Cards: more padding, softer borders, richer depth */
-.card{
-  border-radius: 22px;      /* was 18px */
-  padding: 26px;            /* was 18px */
-  border: 1px solid rgba(255,255,255,.075); /* softer than var(--border) */
-  box-shadow:
-    0 22px 70px rgba(0,0,0,.45),
-    0 0 0 1px rgba(255,255,255,.02) inset;
-}
-
-/* Keep inner cards slightly tighter if needed */
-.card .card{
-  padding: 18px;
-  border-radius: 18px;
-  box-shadow:
-    0 14px 44px rgba(0,0,0,.38),
-    0 0 0 1px rgba(255,255,255,.02) inset;
-}
-
-/* 5) Grid spacing: more breathing room */
-.grid{
-  gap: 22px; /* was 16px */
-}
-
-/* 6) Chips: bigger & calmer */
-.chip{
-  padding: 10px 14px;       /* was 9px 12px */
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.09);
-  background: rgba(255,255,255,.035);
-  font-size: 13px;
-}
-
-/* 7) Buttons: luxury sizing + calmer hover */
-.btn{
-  padding: 14px 18px;       /* was 12px 14px */
-  border-radius: 16px;      /* was 14px */
-  font-size: 15px;
-  font-weight: 900;
-  background: rgba(255,255,255,.045);
-  border: 1px solid rgba(255,255,255,.10);
-  transform: translateZ(0);
-}
-.btn:hover{
-  transform: translateY(-1px);
-  background: rgba(255,255,255,.06);
-}
-.btn.primary{
-  border-color: rgba(255,88,198,.34);
-  background: linear-gradient(135deg, rgba(255,88,198,.30), rgba(142,133,255,.18));
-  box-shadow:
-    0 16px 40px rgba(0,0,0,.45),
-    0 0 48px rgba(255,88,198,.18);
-}
-
-/* 8) Inputs: bigger, clearer, more premium */
-input{
-  padding: 14px 16px;       /* was 12px 14px */
-  border-radius: 16px;      /* was 14px */
-  font-size: 15px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.035);
-}
-input:focus{
-  border-color: rgba(255,88,198,.30);
-  box-shadow: 0 0 0 4px rgba(255,88,198,.10);
-}
-
-/* 9) Tables: more legible */
-thead th{
-  font-size: 12.5px;
-  letter-spacing: .2px;
+  background: rgba(255,255,255,.02);
 }
 tbody td{
-  font-size: 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+tbody tr:hover{ background: rgba(255,255,255,.03); }
+
+html[data-theme="light"] .table-wrap{
+  background: rgba(0,0,0,.02);
+  border-color: rgba(10,12,18,.14);
+}
+html[data-theme="light"] thead th{
+  background: rgba(0,0,0,.03);
+  border-bottom-color: rgba(10,12,18,.12);
+}
+html[data-theme="light"] tbody td{
+  border-bottom-color: rgba(10,12,18,.08);
+}
+html[data-theme="light"] tbody tr:hover{
+  background: rgba(0,0,0,.03);
 }
 
-/* 10) Make hero text + paragraphs nicer */
-p{
-  font-size: 16px;
-  line-height: 1.65;
+/* ========= Mobile dropdown panel from NavBar.tsx ========= */
+.ddx-menuPanel{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(circle at 25% 10%, rgba(255,90,210,.14), rgba(0,0,0,0) 55%),
+    radial-gradient(circle at 85% 0%, rgba(90,120,255,.12), rgba(0,0,0,0) 55%),
+    rgba(18,18,18,.78);
+  backdrop-filter: blur(14px);
+  padding: 12px;
+}
+.ddx-sep{ height: 1px; background: rgba(255,255,255,.08); margin: 6px 0; }
+
+html[data-theme="light"] .ddx-menuPanel{
+  border-color: rgba(10,12,18,.14);
+  background:
+    radial-gradient(circle at 25% 10%, rgba(255,90,210,.10), rgba(0,0,0,0) 55%),
+    radial-gradient(circle at 85% 0%, rgba(90,120,255,.10), rgba(0,0,0,0) 55%),
+    rgba(255,255,255,.90);
+}
+html[data-theme="light"] .ddx-sep{ background: rgba(10,12,18,.10); }
+
+/* ========= NetworkGuard (clean + centered) ========= */
+.ddx-guardWrap{
+  padding: 10px 0 0;
 }
 
-/* 11) Mobile tuning */
-@media (max-width: 980px){
-  h1{ font-size: 34px; }
-  .card{ padding: 20px; border-radius: 20px; }
-  .grid{ gap: 16px; }
-  .wrap{ width: min(1240px, calc(100% - 22px)); }
+.ddx-guard{
+  border-radius: 18px;
+  border: 1px solid var(--border2);
+  background: rgba(255,255,255,.035);
+  padding: 12px 14px;
+  box-shadow: 0 12px 36px rgba(0,0,0,.18);
+}
+
+html[data-theme="light"] .ddx-guard{
+  background: rgba(0,0,0,.03);
+  border-color: rgba(10,12,18,.14);
+  box-shadow: 0 12px 34px rgba(10,12,18,.08);
+}
+
+.ddx-guardTitle{
+  font-weight: 1000;
+  letter-spacing: -0.2px;
+}
+.ddx-guardText{
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ddx-guardActions{
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Guard variants */
+.ddx-guardWarn{ border-color: rgba(var(--ddx-gold2), .28); }
+.ddx-guardBad{ border-color: rgba(var(--ddx-pink), .26); }
+.ddx-guardInfo{ border-color: rgba(var(--ddx-blue), .22); }
+
+.ddx-guardNote{
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* guard buttons (separate from .btn) */
+.ddx-btn{
+  border-radius: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 950;
+}
+html[data-theme="light"] .ddx-btn{
+  background: rgba(0,0,0,.04);
+  border-color: rgba(10,12,18,.16);
+  color: rgba(10,12,18,.92);
+}
+.ddx-btnPrimary{
+  border: 1px solid rgba(var(--ddx-gold2), .40);
+  background: linear-gradient(135deg, rgba(var(--ddx-gold), .98), rgba(var(--ddx-gold2), .92), rgba(var(--ddx-blue), .78));
+  color: rgba(14,10,6,.96);
+}
+.ddx-btnGhost{
+  background: transparent;
+}
+
+/* ========= Safety: prevent weird click bugs ========= */
+#root, .yf-luxe{ position: relative; z-index: 0; }
+
+/* =========================================================
+   MOBILE NAV FIX (Vercel looks same as local)
+   - Keep nav in ONE ROW (horizontal scroll)
+   - Reduce pill size
+   - No sticky on mobile
+   ========================================================= */
+
+@media (max-width: 680px) {
+  /* If any header/nav is sticky, kill it on mobile */
+  header, nav, .navbar, .ddx-nav, .topbar, .ddx-topbar {
+    position: static !important;
+    top: auto !important;
+  }
+
+  /* Make the nav container NOT tall */
+  header, .ddx-nav, .navbar, .topbar, .ddx-topbar {
+    padding: 10px 10px 6px !important;
+  }
+
+  /* If your nav is a flex wrap row of pills, STOP wrapping */
+  nav, .ddx-nav, .navbar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+  }
+  nav::-webkit-scrollbar, .ddx-nav::-webkit-scrollbar, .navbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Same idea for the theme toggles row */
+  .themeRow, .theme-toggle, .ddx-themeRow, .ddx-theme, .theme-group {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-top: 8px !important;
+  }
+  .themeRow::-webkit-scrollbar, .theme-toggle::-webkit-scrollbar,
+  .ddx-themeRow::-webkit-scrollbar, .theme-group::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Shrink ALL pill-like buttons in header/nav */
+  header a, header button,
+  nav a, nav button,
+  .ddx-nav a, .ddx-nav button,
+  .navbar a, .navbar button {
+    padding: 10px 14px !important;
+    border-radius: 999px !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  /* Reduce the big logo pill too */
+  .brand, .logo, .ddx-brand, .ddx-logo {
+    padding: 10px 14px !important;
+    font-size: 14px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Make the first hero section start closer to top (less wasted space) */
+  .hero, .ddx-hero, .pageHero {
+    margin-top: 8px !important;
+    padding-top: 8px !important;
+  }
 }

@@ -1,9 +1,11 @@
 // src/components/NetworkGuard.tsx
 // ============================================================================
-// DollarDex — NetworkGuard (HARDENED: STEP 13.6)
+// DollarDex — NetworkGuard (HARDENED + CLEAN UI)
 // - Never blocks read-only UI
-// - Shows soft warnings for: no wallet, not connected, wrong network
-// - Provides Switch Network button (BSC Mainnet)
+// - NO "Wallet connected" banner (removes the extreme-left text issue)
+// - NO "Switch to BSC" button (no scary actions on main pages)
+// - Soft, minimal notices only when needed (wallet missing / wrong network / not connected)
+// - Never shows raw wallet/provider errors to users (only safe message)
 // - Safe listeners + cleanup
 // ============================================================================
 
@@ -12,18 +14,14 @@ import { connectWallet, getWalletStateSilently, normalizeChainId, hasWallet } fr
 
 const BSC_CHAIN_ID = 56;
 
-// minimal params for wallet_addEthereumChain / wallet_switchEthereumChain
-const BSC_PARAMS = {
-  chainId: "0x38",
-  chainName: "BNB Smart Chain Mainnet",
-  nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
-  rpcUrls: ["https://bsc-dataseed.binance.org/"],
-  blockExplorerUrls: ["https://bscscan.com/"],
-};
-
 type Props = {
   children: React.ReactNode;
 };
+
+function safeUserMsg(_e: any, fallback: string) {
+  // Never show raw provider/RPC error text in UI
+  return fallback;
+}
 
 /** Soft guard: never blocks rendering children */
 export default function NetworkGuard({ children }: Props) {
@@ -35,16 +33,22 @@ export default function NetworkGuard({ children }: Props) {
 
   const refresh = async () => {
     setNote("");
-    const st = await getWalletStateSilently();
-    if (!st.ok) {
-      setAddr("");
+    try {
+      const st = await getWalletStateSilently();
+      if (!st.ok) {
+        setAddr("");
+        setChainId(st.chainId ?? null);
+        // Do NOT surface raw st.error (can be scary/technical)
+        return;
+      }
+      setAddr(st.address);
       setChainId(st.chainId ?? null);
-      // Only show note if wallet exists; if not, we show a different banner
-      if (walletPresent && st.error) setNote(st.error);
-      return;
+    } catch (e) {
+      // Keep UI calm; log for dev
+      console.error(e);
+      setAddr("");
+      setChainId(null);
     }
-    setAddr(st.address);
-    setChainId(st.chainId ?? null);
   };
 
   useEffect(() => {
@@ -85,108 +89,64 @@ export default function NetworkGuard({ children }: Props) {
 
   const wrongNetwork = chainId != null && chainId !== BSC_CHAIN_ID;
 
-  const switchToBSC = async () => {
-    setNote("");
-    const eth = (window as any)?.ethereum;
-    if (!eth?.request) {
-      setNote("No wallet detected. Install MetaMask to switch networks.");
-      return;
-    }
-
-    try {
-      // try switch
-      await eth.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: BSC_PARAMS.chainId }],
-      });
-      await refresh();
-    } catch (e: any) {
-      // if chain not added, add it
-      const code = e?.code;
-      if (code === 4902 || /unrecognized|unknown chain/i.test(String(e?.message || ""))) {
-        try {
-          await eth.request({
-            method: "wallet_addEthereumChain",
-            params: [BSC_PARAMS],
-          });
-          await refresh();
-          return;
-        } catch (e2: any) {
-          setNote(e2?.message || "Failed to add BSC network.");
-          return;
-        }
-      }
-
-      if (code === 4001) {
-        setNote("Network switch rejected by user.");
-        return;
-      }
-
-      setNote(e?.message || "Failed to switch network.");
-    }
-  };
-
   const connect = async () => {
     setNote("");
-    const st = await connectWallet();
-    if (!st.ok) {
-      setNote(st.error || "Wallet connect failed.");
-      return;
+    try {
+      const st = await connectWallet();
+      if (!st.ok) {
+        setNote(safeUserMsg(st, "Could not connect wallet. Please try again."));
+        return;
+      }
+      setAddr(st.address);
+      setChainId(st.chainId ?? null);
+    } catch (e) {
+      console.error(e);
+      setNote(safeUserMsg(e, "Could not connect wallet. Please try again."));
     }
-    setAddr(st.address);
-    setChainId(st.chainId ?? null);
   };
+
+  // IMPORTANT: We intentionally do NOT render a “Wallet connected” banner anymore.
+  // That banner is what was appearing at the extreme left in your screenshot.
 
   return (
     <>
       {/* Soft banner area */}
       <div className="ddx-guardWrap">
-        {!walletPresent ? (
-          <div className="ddx-guard ddx-guardWarn">
-            <div className="ddx-guardTitle">Wallet not detected</div>
-            <div className="ddx-guardText">
-              Read-only mode is active. Install MetaMask to register, deposit, claim, and compound.
+        <div className="wrap">
+          {!walletPresent ? (
+            <div className="ddx-guard ddx-guardWarn">
+              <div className="ddx-guardTitle">Wallet not detected</div>
+              <div className="ddx-guardText">
+                Read-only mode is active. Install MetaMask to register, deposit, claim, and compound.
+              </div>
             </div>
-          </div>
-        ) : wrongNetwork ? (
-          <div className="ddx-guard ddx-guardBad">
-            <div className="ddx-guardTitle">Wrong network</div>
-            <div className="ddx-guardText">
-              Please switch to <b>BSC Mainnet</b> to use wallet actions. (Reads will still work.)
-            </div>
-            <div className="ddx-guardActions">
-              <button className="ddx-btn ddx-btnPrimary" onClick={switchToBSC}>
-                Switch to BSC
-              </button>
-              {!addr ? (
-                <button className="ddx-btn ddx-btnGhost" onClick={connect}>
+          ) : wrongNetwork ? (
+            <div className="ddx-guard ddx-guardBad">
+              <div className="ddx-guardTitle">Wrong network</div>
+              <div className="ddx-guardText">
+                Please switch your wallet to <b>BSC Mainnet</b> to use actions.
+              </div>
+              <div className="ddx-guardActions">
+                {/* No "Switch to BSC" button by design */}
+                <button className="ddx-btn ddx-btnPrimary" onClick={connect} type="button">
                   Connect Wallet
                 </button>
-              ) : null}
+              </div>
             </div>
-          </div>
-        ) : !addr ? (
-          <div className="ddx-guard ddx-guardInfo">
-            <div className="ddx-guardTitle">Wallet not connected</div>
-            <div className="ddx-guardText">
-              Connect your wallet to use actions. Dashboard reads continue in the background.
+          ) : !addr ? (
+            <div className="ddx-guard ddx-guardInfo">
+              <div className="ddx-guardTitle">Wallet not connected</div>
+              <div className="ddx-guardText">Connect your wallet to use actions. Read-only data stays available.</div>
+              <div className="ddx-guardActions">
+                <button className="ddx-btn ddx-btnPrimary" onClick={connect} type="button">
+                  Connect Wallet
+                </button>
+              </div>
             </div>
-            <div className="ddx-guardActions">
-              <button className="ddx-btn ddx-btnPrimary" onClick={connect}>
-                Connect Wallet
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="ddx-guard ddx-guardOk">
-            <div className="ddx-guardTitle">Wallet connected</div>
-            <div className="ddx-guardText">
-              {addr.slice(0, 6)}…{addr.slice(-4)} on BSC
-            </div>
-          </div>
-        )}
+          ) : null}
 
-        {note ? <div className="ddx-guardNote">{note}</div> : null}
+          {note ? <div className="ddx-guardNote">{note}</div> : null}
+        </div>
       </div>
 
       {children}

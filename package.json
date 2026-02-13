@@ -7,11 +7,16 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+
+    "api": "node scripts/api.mjs",
+    "index:once": "node scripts/indexer.mjs --once",
+    "index:watch": "node scripts/indexer.mjs --watch",
+    "index:export": "node scripts/indexer.mjs --export-json indexed_logs.json"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "ethers": "^6.16.0",
-    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.0"

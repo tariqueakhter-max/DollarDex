@@ -1,26 +1,33 @@
 // ============================== PART 1 / 3 ==============================
 // src/pages/Dashboard.tsx
 // ============================================================================
-// DollarDex — Dashboard page (premium look restored)
+// DollarDex — Dashboard page (MOBILE POLISHED)
 // - DOES NOT render NavBar (AppLayout does)
-// - NO ThemeToggle here (NavBar owns theme)
-// - Layout fix: Deposit moved to the RIGHT of Live Contract Stats (not below)
-// - Premium pink ring timers + deposit feed
+// - Layout: Deposit RIGHT of Live Contract Stats (desktop), stacks on mobile
+// - Mobile fixes: no overflow, grids stack, buttons/inputs full width on phone
 // - Gold per-second accrual ring (TOTAL: Capital + Auto Tier ROI)
-// - STEP 10: Wallet auto-sync (eth_accounts + chainId + listeners)
+// - Wallet auto-sync (eth_accounts + chainId + listeners)
 // ============================================================================
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { BrowserProvider, Contract, JsonRpcProvider, Interface, formatUnits, parseUnits } from "ethers";
 
-import "../lido-luxury.css";
-import "../luxury.css";
-import "../luxury-themes.css";
-import "../dollardex-blackgold-overrides.css";
-
 /** ========= Config ========= */
-const RPC_URL = (import.meta as any).env?.VITE_BSC_RPC?.toString?.() || "https://bsc-dataseed.binance.org/";
+const RPC_URLS = (
+  (import.meta as any).env?.VITE_BSC_RPC_URLS?.toString?.() ||
+  (import.meta as any).env?.VITE_BSC_RPC?.toString?.() ||
+  [
+    "https://bsc-rpc.publicnode.com",
+    "https://bsc-dataseed1.bnbchain.org",
+    "https://bsc-dataseed2.bnbchain.org",
+    "https://bsc-dataseed3.bnbchain.org",
+    "https://bsc-dataseed4.bnbchain.org"
+  ].join(",")
+)
+  .split(",")
+  .map((s: string) => s.trim())
+  .filter(Boolean);
 
 const CONTRACT_ADDRESS = "0xd583327F81fA70d0f30A775dd7E0390B26E324cb";
 const BSCSCAN_CONTRACT = `https://bscscan.com/address/${CONTRACT_ADDRESS}`;
@@ -30,7 +37,60 @@ const TELEGRAM_COMMUNITY = "https://t.me/dollardex_public";
 const BSCSCAN_TX = (tx: string) => `https://bscscan.com/tx/${tx}`;
 
 const BSC_CHAIN_ID_DEC = 56;
-const rpc = new JsonRpcProvider(RPC_URL);
+const BSC_NETWORK = { name: "bsc", chainId: BSC_CHAIN_ID_DEC } as const;
+
+// Lazy RPC with fallback (prevents “failed to detect network” + rate-limit crashes)
+let _rpc: JsonRpcProvider | null = null;
+let _rpcUrl: string | null = null;
+async function getRpc(): Promise<JsonRpcProvider> {
+  if (_rpc) return _rpc;
+
+  let lastErr: any = null;
+
+  for (const url of RPC_URLS) {
+    try {
+const rpc = new JsonRpcProvider(url, BSC_NETWORK, {
+  batchMaxCount: 1,
+  batchStallTime: 0
+});
+
+      // force a real call (and avoid auto-detect flakiness)
+      const cid = await rpc.send("eth_chainId", []);
+      const dec = typeof cid === "string" ? parseInt(cid, 16) : Number(cid);
+
+      if (dec !== BSC_CHAIN_ID_DEC) {
+        lastErr = new Error(`RPC ${url} returned chainId ${dec} (expected ${BSC_CHAIN_ID_DEC})`);
+        continue;
+      }
+
+      _rpc = rpc;
+      _rpcUrl = url;
+      return _rpc;
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+  }
+
+  throw lastErr || new Error("No working BSC RPC endpoint available.");
+}
+
+function resetRpc() {
+  _rpc = null;
+  _rpcUrl = null;
+}
+// Serialize eth_getLogs (prevents provider overload / -32005 / BAD_DATA)
+let _logsLock: Promise<any> = Promise.resolve();
+
+function runLogsExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const next = _logsLock.then(fn, fn);
+  _logsLock = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
+
 
 /** ========= Utilities ========= */
 function getEthereum(): any {
@@ -189,7 +249,7 @@ function ActionButton({
   primary?: boolean;
 }) {
   return (
-    <div style={{ display: "inline-flex", alignItems: "center" }}>
+    <div style={{ display: "inline-flex", alignItems: "center", width: "100%" }}>
       <button className={`btn ${primary ? "primary" : ""}`} onClick={onClick} disabled={disabled} type="button">
         {label}
       </button>
@@ -250,6 +310,8 @@ function CountdownRing({ label, remainingSec, totalSec }: { label: string; remai
     </div>
   );
 }
+
+// ============================== PART 2 / 3 ==============================
 
 function ProgressBar({ pct }: { pct: number }) {
   const p = Math.max(0, Math.min(100, pct));
@@ -470,9 +532,9 @@ function GoldAccrualRing({
         </div>
       </div>
 
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div className="small">{label}</div>
-        <div style={{ fontWeight: 1000, letterSpacing: ".2px" }}>{prettyAccrued}</div>
+        <div style={{ fontWeight: 1000, letterSpacing: ".2px", wordBreak: "break-word" }}>{prettyAccrued}</div>
       </div>
     </div>
   );
@@ -522,7 +584,7 @@ function DollarDexLogo({ size = 28 }: { size?: number }) {
         <path d="M41.1 23.1l4.1 4.1-22.3 22.3-4.1-4.1 22.3-22.3z" fill="rgba(0,0,0,.65)" opacity="0.7" />
       </svg>
 
-      <div style={{ lineHeight: 1 }}>
+      <div style={{ lineHeight: 1, minWidth: 0 }}>
         <div
           style={{
             fontSize: 18,
@@ -546,7 +608,6 @@ function DollarDexLogo({ size = 28 }: { size?: number }) {
   );
 }
 
-// ============================== PART 2 / 3 ==============================
 /** ========= Main ========= */
 export default function Dashboard() {
   const location = useLocation();
@@ -590,20 +651,26 @@ export default function Dashboard() {
   }
 
   async function getDepositLogs(fromBlock: number, toBlock: number) {
-    try {
-      const ev = depositIface.getEvent("Deposit");
-      const topic0 = ev?.topicHash;
-      if (!topic0) return [];
-      return await rpc.getLogs({
+  try {
+    const ev = depositIface.getEvent("Deposit");
+    const topic0 = ev?.topicHash;
+    if (!topic0) return [];
+
+    return await runLogsExclusive(async () => {
+      const p = await getRpc();
+      return await p.getLogs({
         address: CONTRACT_ADDRESS,
         fromBlock,
         toBlock,
         topics: [topic0]
       });
-    } catch {
-      return [];
-    }
+    });
+  } catch {
+    resetRpc();
+    return [];
   }
+}
+
 
   async function bootstrapDepositFeed(latest: number) {
     const ranges = [1200, 2500, 5000, 9000, 15000];
@@ -627,7 +694,7 @@ export default function Dashboard() {
     if (feedLoading) return;
     setFeedLoading(true);
     try {
-      const latest = await rpc.getBlockNumber();
+      const latest = await (await getRpc()).getBlockNumber();
 
       if (!lastFeedBlockRef.current) {
         await bootstrapDepositFeed(latest);
@@ -674,9 +741,8 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    // Launch-safe: load once on page open (no polling to avoid eth_getLogs rate-limits)
     refreshDepositFeed();
-    const t = window.setInterval(refreshDepositFeed, 18_000);
-    return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -687,7 +753,7 @@ export default function Dashboard() {
     return () => window.clearInterval(i);
   }, []);
 
-  /** ===== Wallet / chain (STEP 10: auto-sync) ===== */
+  /** ===== Wallet / chain (auto-sync) ===== */
   const [addr, setAddr] = useState("");
   const [chainOk, setChainOk] = useState(true);
 
@@ -790,7 +856,19 @@ export default function Dashboard() {
   const [dailyActionAmount, setDailyActionAmount] = useState("");
   const [netActionAmount, setNetActionAmount] = useState("");
 
-  const yfRead = useMemo(() => new Contract(CONTRACT_ADDRESS, YF_ABI, rpc), []);
+  const [yfRead, setYfRead] = useState<Contract | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const p = await getRpc();
+        setYfRead(new Contract(CONTRACT_ADDRESS, YF_ABI, p));
+      } catch {
+        setYfRead(null);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function yfWrite() {
     if (!hasWallet()) throw new Error("No wallet detected");
@@ -807,8 +885,13 @@ export default function Dashboard() {
     return new Contract(usdtAddr, ERC20_ABI, signer);
   }
 
+// ============================== PART 3 / 3 ==============================
+
   async function refreshAll() {
     try {
+      const c = yfRead;
+      if (!c) return;
+
       const [
         _usdt,
         _launch,
@@ -825,20 +908,20 @@ export default function Dashboard() {
         _timeStep,
         _maxPos
       ] = await Promise.all([
-        yfRead.USDT(),
-        yfRead.launchDate(),
-        yfRead.totalRegisteredUsers(),
-        yfRead.totalActiveUsers(),
-        yfRead.totalDeposited(),
-        yfRead.totalWithdrawn(),
-        yfRead.CYCLE_DURATION(),
-        yfRead.MINIMUM_DEPOSIT(),
-        yfRead.MINIMUM_WITHDRAW(),
-        yfRead.ADMIN_FEE_PCT(),
-        yfRead.CAPITAL_DAILY_PCT(),
-        yfRead.PERCENTS_DIVIDER(),
-        yfRead.TIME_STEP(),
-        yfRead.MAX_POSITIONS()
+        c.USDT(),
+        c.launchDate(),
+        c.totalRegisteredUsers(),
+        c.totalActiveUsers(),
+        c.totalDeposited(),
+        c.totalWithdrawn(),
+        c.CYCLE_DURATION(),
+        c.MINIMUM_DEPOSIT(),
+        c.MINIMUM_WITHDRAW(),
+        c.ADMIN_FEE_PCT(),
+        c.CAPITAL_DAILY_PCT(),
+        c.PERCENTS_DIVIDER(),
+        c.TIME_STEP(),
+        c.MAX_POSITIONS()
       ]);
 
       setUsdtAddr(_usdt);
@@ -856,47 +939,44 @@ export default function Dashboard() {
       setTimeStep(_timeStep);
       setMaxPositions(BigInt(_maxPos));
 
-      const erc = new Contract(_usdt, ERC20_ABI, rpc);
+      const erc = new Contract(_usdt, ERC20_ABI, await getRpc());
       const [d, s, cb] = await Promise.all([erc.decimals(), erc.symbol(), erc.balanceOf(CONTRACT_ADDRESS)]);
       setDec(Number(d));
       setSym(String(s));
       setContractUsdtBal(cb);
 
       try {
-        const roi = await Promise.all([0, 1, 2, 3, 4].map((i) => yfRead.ROI_DAILY_PCT(i)));
+        const roi = await Promise.all([0, 1, 2, 3, 4].map((i) => c.ROI_DAILY_PCT(i)));
         setRoiDaily(roi.map((x: any) => BigInt(x)));
       } catch {
         setRoiDaily([]);
       }
+
       try {
-        const th = await Promise.all([0, 1, 2, 3, 4].map((i) => yfRead.ROI_THRESHOLDS(i)));
+        const th = await Promise.all([0, 1, 2, 3, 4].map((i) => c.ROI_THRESHOLDS(i)));
         setRoiThresholds(th.map((x: any) => BigInt(x)));
       } catch {
         setRoiThresholds([]);
       }
 
       if (addr) {
-        const u = await yfRead.users(addr);
+        const u = await c.users(addr);
         setReferrer(u[0]);
         setRegistered(Boolean(u[1]));
         setMyActiveDeposit(u[2]);
         setMyTotalDeposit(u[5]);
         setMyTotalWithdrawn(u[6]);
 
-        const [dR, nR, count] = await Promise.all([
-          yfRead.getDailyRewards(addr),
-          yfRead.getNetworkRewards(addr),
-          yfRead.getPositionCount(addr)
-        ]);
+        const [dR, nR, count] = await Promise.all([c.getDailyRewards(addr), c.getNetworkRewards(addr), c.getPositionCount(addr)]);
 
         setDailyAvail(dR[0]);
         setDailyReserve(dR[1]);
         setNetAvail(nR[0]);
         setNetReserve(nR[1]);
 
-        const c = Number(count);
-        if (c > 0) {
-          const rows = await Promise.all(Array.from({ length: c }, (_, i) => yfRead.getPosition(addr, i)));
+        const countN = Number(count);
+        if (countN > 0) {
+          const rows = await Promise.all(Array.from({ length: countN }, (_, i) => c.getPosition(addr, i)));
           setPositions(
             rows.map((r: any, i: number) => ({
               index: i,
@@ -910,7 +990,9 @@ export default function Dashboard() {
               active: Boolean(r[7])
             }))
           );
-        } else setPositions([]);
+        } else {
+          setPositions([]);
+        }
       } else {
         setRegistered(false);
         setReferrer("");
@@ -925,16 +1007,24 @@ export default function Dashboard() {
       }
     } catch (e: any) {
       console.error(e);
-      toast("error", "Failed to load on-chain data", e?.message || "Try again.");
+const msg =
+  e?.shortMessage ||
+  e?.info?.error?.message ||
+  e?.reason ||
+  e?.message ||
+  "Try again.";
+
+toast("error", "Failed to load on-chain data", String(msg).slice(0, 140));
     }
   }
 
   useEffect(() => {
+    if (!yfRead) return;
     refreshAll();
-    const t = window.setInterval(refreshAll, 12_000);
+    const t = window.setInterval(refreshAll, 30_000);
     return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addr]);
+  }, [addr, yfRead]);
 
   async function runTx(label: string, txPromise: Promise<any>) {
     try {
@@ -967,9 +1057,10 @@ export default function Dashboard() {
 
     const amount = parseUnits(depositInput, dec);
     if (amount < minDeposit) return toast("error", "Under minimum", `Minimum deposit is ${formatUnits(minDeposit, dec)} ${sym}`);
-    if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached", `Maximum positions: ${maxPositions.toString()}`);
+    if (positions.length >= Number(maxPositions))
+      return toast("error", "Max positions reached", `Maximum positions: ${maxPositions.toString()}`);
 
-    const ercR = new Contract(usdtAddr, ERC20_ABI, rpc);
+    const ercR = new Contract(usdtAddr, ERC20_ABI, await getRpc());
     const allowance: bigint = await ercR.allowance(addr, CONTRACT_ADDRESS);
     if (allowance < amount) {
       const ercW = await usdtWrite();
@@ -1075,7 +1166,7 @@ export default function Dashboard() {
   const prettyAdminFee = `${pctFromBps(adminFeePct, divider).toFixed(2)}%`;
   const prettyCapitalDaily = `${pctFromBps(capitalDailyPct, divider).toFixed(2)}%`;
 
-  /** ===== STEP 8: AUTO tier ===== */
+  /** ===== AUTO tier ===== */
   const tierIndex = useMemo(() => {
     if (!roiThresholds?.length || !roiDaily?.length) return 0;
     let idx = 0;
@@ -1276,6 +1367,42 @@ export default function Dashboard() {
               align-items: center;
               gap: 10px;
               flex-wrap: wrap;
+              min-width: 0;
+            }
+
+            /* ✅ Right side cards (stats + deposit + quick actions) */
+            .ddx-rightGrid{
+              display:grid;
+              gap:12px;
+              align-items:start;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            @media (max-width: 820px){
+              .ddx-rightGrid{ grid-template-columns: 1fr; }
+            }
+
+            /* ✅ Stack main 3 cards on mobile (Overview / Daily / Network) */
+            @media (max-width: 980px){
+              .grid.grid-3{ grid-template-columns: 1fr !important; }
+            }
+
+            /* ✅ Tables: smooth horizontal scroll */
+            .table-wrap{
+              overflow-x: auto;
+              -webkit-overflow-scrolling: touch;
+            }
+
+            /* ✅ Mobile: topbar becomes vertical + full width buttons */
+            @media (max-width: 640px){
+              .ddx-topbar{ flex-direction: column; align-items: stretch; }
+              .ddx-actions{ justify-content: flex-start; width: 100%; }
+              .ddx-tgBtn{ width: 100%; justify-content: center; }
+            }
+
+            /* ✅ Very small phones: inputs & buttons full width */
+            @media (max-width: 520px){
+              input{ width: 100% !important; }
+              .btn{ width: 100%; justify-content: center; }
             }
           `}
         </style>
@@ -1283,8 +1410,7 @@ export default function Dashboard() {
         <div className="card">
           <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
             {/* LEFT */}
-            <div style={{ flex: "1 1 560px", minWidth: 420 }}>
-              {/* ✅ FIXED: Premium topbar (single, no duplicates) */}
+            <div style={{ flex: "1 1 560px", minWidth: 0 }}>
               <div className="ddx-topbar">
                 <div className="ddx-metaRow">
                   <div className="ddx-logo">
@@ -1361,7 +1487,7 @@ export default function Dashboard() {
 
               <div className="card" style={{ marginTop: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div className="small" style={{ letterSpacing: ".22em", textTransform: "uppercase" }}>
                       Accrual (Today)
                     </div>
@@ -1402,15 +1528,8 @@ export default function Dashboard() {
             </div>
 
             {/* RIGHT */}
-            <div style={{ flex: "1 1 680px", minWidth: 360 }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                  gap: 12,
-                  alignItems: "start"
-                }}
-              >
+            <div style={{ flex: "1 1 680px", minWidth: 0 }}>
+              <div className="ddx-rightGrid">
                 {/* Live Contract Stats */}
                 <div className="card" style={{ padding: 16 }}>
                   <h3 style={{ marginBottom: 10 }}>Live Contract Stats</h3>
@@ -1451,7 +1570,7 @@ export default function Dashboard() {
                   </a>
                 </div>
 
-                {/* Deposit (RIGHT of stats) */}
+                {/* Deposit */}
                 <div className="card" style={{ padding: 16 }}>
                   <h3>Deposit</h3>
 
@@ -1501,7 +1620,7 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {/* Quick Actions to remove empty feel */}
+                {/* Quick Actions */}
                 <div className="card" style={{ padding: 16 }}>
                   <h3 style={{ marginBottom: 8 }}>Quick Actions</h3>
                   <div className="small">Use the cards below to claim/compound. Network Dashboard and Referral pages are available in the menu.</div>
@@ -1536,47 +1655,13 @@ export default function Dashboard() {
                 <div style={{ display: "grid", gap: 12 }}>
                   <StatRow
                     label="Active deposit"
-                    value={
-                      <span>
-                        {formatUnits(myActiveDeposit, dec)} {sym}
-                      </span>
-                    }
+                    value={<span>{formatUnits(myActiveDeposit, dec)} {sym}</span>}
                     hint={`${mySharePct.toFixed(4)}% share`}
                   />
-                  <StatRow
-                    label="Total deposited"
-                    value={
-                      <span>
-                        {formatUnits(myTotalDeposit, dec)} {sym}
-                      </span>
-                    }
-                  />
-                  <StatRow
-                    label="Total withdrawn"
-                    value={
-                      <span>
-                        {formatUnits(myTotalWithdrawn, dec)} {sym}
-                      </span>
-                    }
-                  />
-                  <StatRow
-                    label="Total rewards available"
-                    value={
-                      <span>
-                        {formatUnits(myTotalRewardsAvailable, dec)} {sym}
-                      </span>
-                    }
-                    hint="Daily + Network"
-                  />
-                  <StatRow
-                    label="Base daily projection"
-                    value={
-                      <span>
-                        {formatUnits(baseDailyProjection, dec)} {sym}
-                      </span>
-                    }
-                    hint="capital only"
-                  />
+                  <StatRow label="Total deposited" value={<span>{formatUnits(myTotalDeposit, dec)} {sym}</span>} />
+                  <StatRow label="Total withdrawn" value={<span>{formatUnits(myTotalWithdrawn, dec)} {sym}</span>} />
+                  <StatRow label="Total rewards available" value={<span>{formatUnits(myTotalRewardsAvailable, dec)} {sym}</span>} hint="Daily + Network" />
+                  <StatRow label="Base daily projection" value={<span>{formatUnits(baseDailyProjection, dec)} {sym}</span>} hint="capital only" />
                   <div style={{ height: 2 }} />
                   <StatRow label="Active positions" value={activePositionsCount} hint={`${slotsUsedPct.toFixed(1)}% slots used`} />
                   <div>
@@ -1586,25 +1671,14 @@ export default function Dashboard() {
                     <ProgressBar pct={myProgressPct} />
                     <div className="small" style={{ marginTop: 8 }}>
                       Earned{" "}
-                      <b style={{ color: "var(--text)" as any }}>
-                        {formatUnits(positionsEarnedSum, dec)} {sym}
-                      </b>{" "}
+                      <b style={{ color: "var(--text)" as any }}>{formatUnits(positionsEarnedSum, dec)} {sym}</b>{" "}
                       · Expected{" "}
-                      <b style={{ color: "var(--text)" as any }}>
-                        {formatUnits(positionsExpectedSum, dec)} {sym}
-                      </b>
+                      <b style={{ color: "var(--text)" as any }}>{formatUnits(positionsExpectedSum, dec)} {sym}</b>
                     </div>
                   </div>
                   <div style={{ height: 2 }} />
                   <StatRow label="Protocol payout ratio" value={`${protocolPayoutPct.toFixed(2)}%`} hint="withdrawn / deposited" />
-                  <StatRow
-                    label="Positions total amount"
-                    value={
-                      <span>
-                        {formatUnits(positionsAmountSum, dec)} {sym}
-                      </span>
-                    }
-                  />
+                  <StatRow label="Positions total amount" value={<span>{formatUnits(positionsAmountSum, dec)} {sym}</span>} />
                 </div>
               </>
             )}
@@ -1612,7 +1686,7 @@ export default function Dashboard() {
 
           {/* DAILY */}
           <div className="card" style={{ position: "relative" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <h3 style={{ margin: 0 }}>Daily Rewards</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {addr && registered && chainOk && myActiveDeposit > 0n ? (
@@ -1625,14 +1699,12 @@ export default function Dashboard() {
             <div className="small" style={{ marginTop: 12 }}>
               Available now
             </div>
-            <div style={{ fontSize: 32, fontWeight: 950, marginTop: 6, letterSpacing: "-0.2px" }}>
+            <div style={{ fontSize: 32, fontWeight: 950, marginTop: 6, letterSpacing: "-0.2px", wordBreak: "break-word" }}>
               {formatUnits(smoothDaily, dec)} {sym}
             </div>
             <div className="small" style={{ marginTop: 8 }}>
               Reserve included:{" "}
-              <b style={{ color: "var(--text)" as any }}>
-                {formatUnits(dailyReserve, dec)} {sym}
-              </b>
+              <b style={{ color: "var(--text)" as any }}>{formatUnits(dailyReserve, dec)} {sym}</b>
             </div>
 
             <div style={{ height: 14 }} />
@@ -1666,14 +1738,7 @@ export default function Dashboard() {
               <ActionButton
                 label="Compound Daily"
                 onClick={onCompoundDaily}
-                disabled={
-                  !addr ||
-                  !registered ||
-                  !chainOk ||
-                  dailyAvail <= 0n ||
-                  (minWithdraw > 0n && dailyAvail < minWithdraw) ||
-                  positions.length >= Number(maxPositions)
-                }
+                disabled={!addr || !registered || !chainOk || dailyAvail <= 0n || (minWithdraw > 0n && dailyAvail < minWithdraw) || positions.length >= Number(maxPositions)}
                 disabledReason={positions.length >= Number(maxPositions) ? reasonMaxPos : dailyDisabledReason}
               />
             </div>
@@ -1689,14 +1754,12 @@ export default function Dashboard() {
             <div className="small" style={{ marginTop: 12 }}>
               Available now
             </div>
-            <div style={{ fontSize: 32, fontWeight: 950, marginTop: 6, letterSpacing: "-0.2px" }}>
+            <div style={{ fontSize: 32, fontWeight: 950, marginTop: 6, letterSpacing: "-0.2px", wordBreak: "break-word" }}>
               {formatUnits(smoothNet, dec)} {sym}
             </div>
             <div className="small" style={{ marginTop: 8 }}>
               Reserve included:{" "}
-              <b style={{ color: "var(--text)" as any }}>
-                {formatUnits(netReserve, dec)} {sym}
-              </b>
+              <b style={{ color: "var(--text)" as any }}>{formatUnits(netReserve, dec)} {sym}</b>
             </div>
 
             <div style={{ height: 14 }} />
@@ -1716,14 +1779,7 @@ export default function Dashboard() {
               <ActionButton
                 label="Compound Network"
                 onClick={onCompoundNetwork}
-                disabled={
-                  !addr ||
-                  !registered ||
-                  !chainOk ||
-                  netAvail <= 0n ||
-                  (minWithdraw > 0n && netAvail < minWithdraw) ||
-                  positions.length >= Number(maxPositions)
-                }
+                disabled={!addr || !registered || !chainOk || netAvail <= 0n || (minWithdraw > 0n && netAvail < minWithdraw) || positions.length >= Number(maxPositions)}
                 disabledReason={positions.length >= Number(maxPositions) ? reasonMaxPos : netDisabledReason}
               />
             </div>
@@ -1768,31 +1824,16 @@ export default function Dashboard() {
 
                     return (
                       <tr key={p.index}>
-                        <td>
-                          <b>#{p.index + 1}</b>
-                        </td>
-                        <td>
-                          {formatUnits(p.amount, dec)} {sym}
-                        </td>
+                        <td><b>#{p.index + 1}</b></td>
+                        <td>{formatUnits(p.amount, dec)} {sym}</td>
                         <td>{new Date(p.startTime * 1000).toLocaleString()}</td>
                         <td>{new Date(p.endTime * 1000).toLocaleString()}</td>
-                        <td>
-                          <b>
-                            {formatUnits(p.earned, dec)} {sym}
-                          </b>
-                        </td>
-                        <td>
-                          {formatUnits(p.expected, dec)} {sym}
-                        </td>
-                        <td>
-                          <span className="chip mono">{rem === 0 ? "Ready" : fmtCountdown(rem)}</span>
-                        </td>
+                        <td><b>{formatUnits(p.earned, dec)} {sym}</b></td>
+                        <td>{formatUnits(p.expected, dec)} {sym}</td>
+                        <td><span className="chip mono">{rem === 0 ? "Ready" : fmtCountdown(rem)}</span></td>
                         <td>
                           <span className="chip">
-                            <span
-                              className="dot"
-                              style={{ background: active ? "rgba(255,88,198,.95)" : "rgba(255,107,107,.95)" }}
-                            />
+                            <span className="dot" style={{ background: active ? "rgba(255,88,198,.95)" : "rgba(255,107,107,.95)" }} />
                             {active ? "Active" : "Ended"}
                           </span>
                         </td>
@@ -1852,11 +1893,7 @@ export default function Dashboard() {
                     <tr key={`${d.tx}-${d.blockNumber}`}>
                       <td className="mono">{timeAgo(d.ts)}</td>
                       <td className="mono">{shortAddr(d.user)}</td>
-                      <td>
-                        <b>
-                          {formatUnits(d.amount, dec)} {sym}
-                        </b>
-                      </td>
+                      <td><b>{formatUnits(d.amount, dec)} {sym}</b></td>
                       <td>
                         <a className="mono" href={BSCSCAN_TX(d.tx)} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
                           {d.tx.slice(0, 10)}…

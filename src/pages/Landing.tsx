@@ -9,11 +9,6 @@
 import { useCountUp } from "../components/useCountUP";
 import { useEffect, useRef, useState } from "react";
 import { Contract, JsonRpcProvider, formatUnits } from "ethers";
-import "../lido-luxury.css";
-import "../luxury.css";
-import "../luxury-themes.css";
-import "../dollardex-blackgold-overrides.css";
-import "../dollardex-blackgold-blue.css";
 
 /** ========= Config ========= */
 const CONTRACT_ADDRESS =

@@ -1,28 +1,19 @@
-// src/pages/NetworkDashboard.tsx
+// src/pages/networkdashboard.tsx
 // ============================================================================
-// DollarDex — Network Dashboard (STEP 11.2)
-// - Premium layout using existing CSS tokens/classes: wrap, card, chip, dot, btn, small
-// - OPTION A (event exists) — LOCKED event signature for maximum speed:
-//      event Register(address indexed user, address indexed referrer)
-// - Builds direct referrals + expandable tree from event logs
-// - Caching:
-//    - Stores adjacency lists (childrenOf, parentOf), scan window, and last scanned block in localStorage
-//    - Next load is instant
-// - Resume scan:
-//    - Scans only NEW blocks since last scanned block
+// DollarDex — Network Dashboard (SAFE + No Scary Errors + No Build Button)
+// - Contract-matching ABI (from your pasted ABI)
+// - Uses correct event: Registration(address user, address referrer, uint256 timestamp)
+// - NO raw error messages shown to users (sanitized UX)
+// - NO "Build Network" button (auto-scan silently + cache)
+// - Tree/direct list only appears when cache exists; otherwise calm placeholder.
+// - Handles eth_getLogs rate limits with chunking + retry + backoff.
 // ============================================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserProvider, Contract, Interface, JsonRpcProvider, formatUnits } from "ethers";
-import "../lido-luxury.css";
-import "../luxury.css";
-import "../luxury-themes.css";
-import "../dollardex-blackgold-overrides.css";
 
 /** ========= Config ========= */
-const RPC_URL =
-  (import.meta as any).env?.VITE_BSC_RPC?.toString?.() || "https://bsc-dataseed.binance.org/";
-
+const RPC_URL = (import.meta as any).env?.VITE_BSC_RPC?.toString?.() || "https://bsc-dataseed.binance.org/";
 const CONTRACT_ADDRESS = "0xd583327F81fA70d0f30A775dd7E0390B26E324cb";
 const BSCSCAN_CONTRACT = `https://bscscan.com/address/${CONTRACT_ADDRESS}`;
 const BSCSCAN_ADDR = (a: string) => `https://bscscan.com/address/${a}`;
@@ -30,30 +21,40 @@ const BSCSCAN_ADDR = (a: string) => `https://bscscan.com/address/${a}`;
 const BSC_CHAIN_ID_DEC = 56;
 const rpc = new JsonRpcProvider(RPC_URL);
 
-/** ========= ABIs ========= */
+/** ========= ABIs (from your pasted ABI) ========= */
 const YF_ABI = [
   "function USDT() view returns(address)",
-  "function users(address) view returns(address,bool,uint256,uint256,uint256,uint256,uint256)",
-  "function usersExtra(address) view returns(uint256,uint256,uint256,uint256,uint256,uint256,uint32,uint32,uint32,uint8)",
-  "function getNetworkRewards(address) view returns(uint256,uint256)"
+  "function users(address) view returns(address referrer,bool registered,uint256 totalActiveDeposit,uint256 teamActiveDeposit,uint256 teamTotalDeposit,uint256 totalDeposited,uint256 totalWithdrawn)",
+  "function usersExtra(address) view returns(uint256 rewardsReferral,uint256 rewardsOnboarding,uint256 rewardsRank,uint256 reserveDailyCapital,uint256 reserveDailyROI,uint256 reserveNetwork,uint32 teamCount,uint32 directsCount,uint32 directsQuali,uint8 rank)",
+  "function getNetworkRewards(address userAddr) view returns(uint256 availableReward,uint256 reserve)",
 ];
 
 const ERC20_ABI = ["function symbol() view returns(string)", "function decimals() view returns(uint8)"];
 
-// ✅ LOCKED referral event (as you said: "Register")
-const REF_EVENT_ABI = "event Register(address indexed user, address indexed referrer)";
+// ✅ Correct event
+const REG_EVENT_ABI = "event Registration(address indexed user, address indexed referrer, uint256 timestamp)";
 
 /** ========= Cache ========= */
-const CACHE_VERSION = "v1";
-const LS_KEY = (rootAddrLower: string) => `ddx_net_cache_${CACHE_VERSION}_${CONTRACT_ADDRESS.toLowerCase()}_${rootAddrLower}`;
+const CACHE_VERSION = "v3"; // bump whenever cache format/behavior changes
+const LS_KEY = (rootAddrLower: string) =>
+  `ddx_net_cache_${CACHE_VERSION}_${CONTRACT_ADDRESS.toLowerCase()}_${rootAddrLower}`;
 
-/** ========= Utilities ========= */
+type CachePayload = {
+  contract: string;
+  root: string;
+  fromBlock: number;
+  toBlock: number;
+  lastScannedBlock: number;
+  parentOf: Record<string, string>;
+  childrenOf: Record<string, string[]>;
+  updatedAt?: number;
+};
+
+/** ========= Utils ========= */
 function getEthereum(): any {
   return (window as any).ethereum;
 }
-function hasWallet() {
-  return typeof (window as any).ethereum !== "undefined";
-}
+
 function normalizeChainId(cid: any): number | null {
   if (cid == null) return null;
   if (typeof cid === "string") {
@@ -66,10 +67,16 @@ function normalizeChainId(cid: any): number | null {
   if (typeof cid === "object" && cid) return normalizeChainId((cid as any).chainId);
   return null;
 }
+
 function shortAddr(a: string) {
   if (!a) return "";
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
+
+function uniq<T>(arr: T[]) {
+  return Array.from(new Set(arr));
+}
+
 async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -89,50 +96,90 @@ async function copyText(text: string) {
   }
 }
 
-function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Very important: NEVER show raw provider errors to user.
+// We only return a gentle boolean.
+function isRateLimitErr(e: any) {
+  const msg = String(e?.message || "");
+  // BSC / RPC typical signals:
+  return msg.includes("-32005") || msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("too many");
+}
+
+function safeConsoleWarn(e: any) {
+  // Keep console short (optional), NEVER show payloads in UI.
+  try {
+    const msg = String(e?.message || e || "unknown");
+    console.warn("[NetworkDashboard] RPC issue:", msg.slice(0, 180));
+  } catch {}
+}
+
+function GlowCard({
+  title,
+  subtitle,
+  right,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-      <div className="small">{label}</div>
-      <div style={{ fontWeight: 1000 }}>{value}</div>
+    <div className="card" style={{ position: "relative", overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ marginTop: 0, marginBottom: 6 }}>{title}</h3>
+          {subtitle ? <div className="small">{subtitle}</div> : null}
+        </div>
+        {right ? <div>{right}</div> : null}
+      </div>
+
+      <div style={{ marginTop: 12 }}>{children}</div>
+
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: "-140px -160px auto auto",
+          width: 340,
+          height: 340,
+          background:
+            "radial-gradient(circle at 30% 30%, rgba(255,90,210,.16), rgba(0,0,0,0) 62%), radial-gradient(circle at 70% 70%, rgba(90,120,255,.14), rgba(0,0,0,0) 64%)",
+          pointerEvents: "none",
+          opacity: 0.9,
+        }}
+      />
     </div>
   );
 }
 
-function uniq<T>(arr: T[]) {
-  return Array.from(new Set(arr));
+function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+      <div className="small">{label}</div>
+      <div style={{ fontWeight: 1000, fontVariantNumeric: "tabular-nums" as any }}>{value}</div>
+    </div>
+  );
 }
-
-type TreeNode = { addr: string; level: number; parent?: string; children: string[] };
-
-type CachePayload = {
-  contract: string;
-  root: string;
-  scanSpan: number;
-  fromBlock: number;
-  toBlock: number;
-  lastScannedBlock: number;
-  // adjacency lists as plain objects for JSON
-  parentOf: Record<string, string>;
-  childrenOf: Record<string, string[]>;
-};
 
 /** ========= Page ========= */
 export default function NetworkDashboard() {
   const yfRead = useMemo(() => new Contract(CONTRACT_ADDRESS, YF_ABI, rpc), []);
 
-  // Locked interface + topic0
-  const refIface = useMemo(() => new Interface([REF_EVENT_ABI]), []);
-  const refTopic0 = useMemo(() => {
+  const regIface = useMemo(() => new Interface([REG_EVENT_ABI]), []);
+  const regTopic0 = useMemo(() => {
     try {
-const ev = refIface.getEvent("Register");
-return ev?.topicHash ?? "";
-
+      const ev = regIface.getEvent("Registration");
+      return ev?.topicHash ?? "";
     } catch {
       return "";
     }
-  }, [refIface]);
+  }, [regIface]);
 
-  // Wallet state
+  // Wallet
   const [addr, setAddr] = useState("");
   const [chainOk, setChainOk] = useState(true);
 
@@ -140,45 +187,31 @@ return ev?.topicHash ?? "";
   const [sym, setSym] = useState("USDT");
   const [dec, setDec] = useState(18);
 
-  // User core
+  // On-chain user stats
   const [registered, setRegistered] = useState(false);
   const [referrer, setReferrer] = useState("");
-  const [myActiveDeposit, setMyActiveDeposit] = useState<bigint>(0n);
-  const [myTotalDeposit, setMyTotalDeposit] = useState<bigint>(0n);
-  const [myTotalWithdrawn, setMyTotalWithdrawn] = useState<bigint>(0n);
+  const [teamCount, setTeamCount] = useState<number>(0);
+  const [directsCount, setDirectsCount] = useState<number>(0);
+  const [directsQuali, setDirectsQuali] = useState<number>(0);
+  const [rank, setRank] = useState<number>(0);
 
-  // Network rewards
   const [netAvail, setNetAvail] = useState<bigint>(0n);
   const [netReserve, setNetReserve] = useState<bigint>(0n);
 
-  // Extra tuple (raw)
-  const [extra, setExtra] = useState<(bigint | number)[] | null>(null);
-
-  // Referral scan config
-  const DEFAULT_SPAN = 200_000;
-  const STEP_OLDER = 200_000;
-  const HARD_MAX_SPAN = 2_000_000;
-
-  const [scanSpan, setScanSpan] = useState<number>(DEFAULT_SPAN);
-  const [scanStatus, setScanStatus] = useState<string>("Not scanned yet.");
-  const [scanLoading, setScanLoading] = useState(false);
-  const [scanFromBlock, setScanFromBlock] = useState<number>(0);
-  const [scanToBlock, setScanToBlock] = useState<number>(0);
-  const [lastScannedBlock, setLastScannedBlock] = useState<number>(0);
-
-  // Graph maps
-  const parentOfRef = useRef<Map<string, string>>(new Map()); // child -> parent
-  const childrenOfRef = useRef<Map<string, string[]>>(new Map()); // parent -> children
-
-  // Derived display state
+  // Graph cache + UI
+  const parentOfRef = useRef<Map<string, string>>(new Map());
+  const childrenOfRef = useRef<Map<string, string[]>>(new Map());
   const [directRefs, setDirectRefs] = useState<string[]>([]);
-  const [teamNodes, setTeamNodes] = useState<TreeNode[]>([]);
   const [levels, setLevels] = useState<Record<number, number>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  // UX
+  const [cacheInfo, setCacheInfo] = useState<{ hasCache: boolean; updatedAt?: number }>({ hasCache: false });
+
+  // Gentle status text only (never scary)
+  const [softStatus, setSoftStatus] = useState<string>("");
+
+  // Copy
   const [copied, setCopied] = useState(false);
-  const [msg, setMsg] = useState<string>("");
 
   const origin = useMemo(() => {
     try {
@@ -219,15 +252,16 @@ return ev?.topicHash ?? "";
     try {
       const eth = getEthereum();
       if (!eth?.request) {
-        setMsg("No wallet detected. Install MetaMask.");
+        setSoftStatus("Wallet not detected. Install MetaMask to connect.");
         return;
       }
       const bp = new BrowserProvider(eth);
       await bp.send("eth_requestAccounts", []);
       await syncWalletSilent();
-      setMsg("");
-    } catch (e: any) {
-      setMsg(e?.message || "Connect failed.");
+      setSoftStatus("");
+    } catch {
+      // Do NOT show raw message
+      setSoftStatus("Could not connect. Please try again.");
     }
   }
 
@@ -247,20 +281,17 @@ return ev?.topicHash ?? "";
       try {
         eth.removeListener?.("accountsChanged", onAcc);
         eth.removeListener?.("chainChanged", onChain);
-      } catch {
-        // ignore
-      }
+      } catch {}
     };
   }, []);
 
-  /** ========= User refresh ========= */
-  async function refreshUser() {
+  /** ========= Load on-chain summaries (light calls) ========= */
+  async function refreshOnChain() {
     try {
-      setMsg("");
-
-      const _usdt = await yfRead.USDT();
+      // token meta
+      const usdt = await yfRead.USDT();
       try {
-        const erc = new Contract(_usdt, ERC20_ABI, rpc);
+        const erc = new Contract(usdt, ERC20_ABI, rpc);
         const [d, s] = await Promise.all([erc.decimals(), erc.symbol()]);
         setDec(Number(d));
         setSym(String(s));
@@ -272,50 +303,50 @@ return ev?.topicHash ?? "";
       if (!addr) {
         setRegistered(false);
         setReferrer("");
-        setMyActiveDeposit(0n);
-        setMyTotalDeposit(0n);
-        setMyTotalWithdrawn(0n);
+        setTeamCount(0);
+        setDirectsCount(0);
+        setDirectsQuali(0);
+        setRank(0);
         setNetAvail(0n);
         setNetReserve(0n);
-        setExtra(null);
         return;
       }
 
       const u = await yfRead.users(addr);
-      setReferrer(String(u[0]));
-      setRegistered(Boolean(u[1]));
-      setMyActiveDeposit(BigInt(u[2]));
-      setMyTotalDeposit(BigInt(u[5]));
-      setMyTotalWithdrawn(BigInt(u[6]));
+      setReferrer(String(u.referrer ?? u[0]));
+      setRegistered(Boolean(u.registered ?? u[1]));
+
+      try {
+        const ex = await yfRead.usersExtra(addr);
+        setTeamCount(Number(ex.teamCount ?? ex[6] ?? 0));
+        setDirectsCount(Number(ex.directsCount ?? ex[7] ?? 0));
+        setDirectsQuali(Number(ex.directsQuali ?? ex[8] ?? 0));
+        setRank(Number(ex.rank ?? ex[9] ?? 0));
+      } catch {
+        setTeamCount(0);
+        setDirectsCount(0);
+        setDirectsQuali(0);
+        setRank(0);
+      }
 
       try {
         const nR = await yfRead.getNetworkRewards(addr);
-        setNetAvail(BigInt(nR[0]));
-        setNetReserve(BigInt(nR[1]));
+        setNetAvail(BigInt(nR.availableReward ?? nR[0] ?? 0));
+        setNetReserve(BigInt(nR.reserve ?? nR[1] ?? 0));
       } catch {
         setNetAvail(0n);
         setNetReserve(0n);
       }
-
-      try {
-        const ex = await yfRead.usersExtra(addr);
-        const arr: (bigint | number)[] = [];
-        for (let i = 0; i < 10; i++) {
-          const v = ex[i];
-          arr.push(typeof v === "bigint" ? v : Number(v));
-        }
-        setExtra(arr);
-      } catch {
-        setExtra(null);
-      }
     } catch (e: any) {
-      setMsg(e?.message || "Failed to load network data.");
+      safeConsoleWarn(e);
+      // Calm message only; no raw error.
+      setSoftStatus((s) => s || "Network info is loading…");
     }
   }
 
   useEffect(() => {
-    refreshUser();
-    const t = window.setInterval(refreshUser, 12_000);
+    refreshOnChain();
+    const t = window.setInterval(refreshOnChain, 12_000);
     return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addr]);
@@ -324,9 +355,7 @@ return ev?.topicHash ?? "";
   function saveCache(rootLower: string, payload: CachePayload) {
     try {
       localStorage.setItem(LS_KEY(rootLower), JSON.stringify(payload));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   function loadCache(rootLower: string): CachePayload | null {
@@ -357,10 +386,7 @@ return ev?.topicHash ?? "";
     parentOfRef.current = pMap;
     childrenOfRef.current = cMap;
 
-    setScanSpan(payload.scanSpan || DEFAULT_SPAN);
-    setScanFromBlock(payload.fromBlock || 0);
-    setScanToBlock(payload.toBlock || 0);
-    setLastScannedBlock(payload.lastScannedBlock || payload.toBlock || 0);
+    setCacheInfo({ hasCache: true, updatedAt: payload.updatedAt });
   }
 
   /** ========= Graph building ========= */
@@ -378,240 +404,216 @@ return ev?.topicHash ?? "";
     if (!prev.includes(c)) childrenOfRef.current.set(p, [...prev, c]);
   }
 
-  function parseRegisterLog(log: any): { user: string; ref: string } | null {
+  function parseRegistrationLog(log: any): { user: string; ref: string } | null {
     try {
-      const parsed = refIface.parseLog(log);
+      const parsed = regIface.parseLog(log);
       const args: any = (parsed as any).args;
       const user = args.user ?? args[0];
       const ref = args.referrer ?? args[1];
       const u = typeof user === "string" ? user : String(user);
       const r = typeof ref === "string" ? ref : String(ref);
       if (u && u.startsWith("0x") && r && r.startsWith("0x")) return { user: u, ref: r };
-    } catch {
-      // ignore
+    } catch {}
+    return null;
+  }
+
+  // Throttled + retry getLogs to avoid rate-limit panic
+  async function getLogsSafe(params: { address: string; fromBlock: number; toBlock: number; topics: string[] }) {
+    const MAX_RETRIES = 5;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await rpc.getLogs(params as any);
+      } catch (e: any) {
+        safeConsoleWarn(e);
+        if (isRateLimitErr(e)) {
+          // exponential-ish backoff
+          const wait = 450 * Math.pow(2, attempt) + Math.floor(Math.random() * 250);
+          await sleep(Math.min(wait, 4500));
+          continue;
+        }
+        // Non-rate-limit error: stop (silent)
+        return null;
+      }
     }
     return null;
   }
 
-  async function scanLogs(fromBlock: number, toBlock: number) {
-    if (!refTopic0) return { totalLogs: 0, parsedEdges: 0 };
+  async function scanLogsWindow(fromBlock: number, toBlock: number) {
+    if (!regTopic0) return false;
 
-    const CHUNK = 30_000;
-    let totalLogs = 0;
-    let parsedEdges = 0;
+    // smaller chunks = fewer rate-limits
+    const CHUNK = 8_000;
 
     for (let start = fromBlock; start <= toBlock; start += CHUNK + 1) {
       const end = Math.min(toBlock, start + CHUNK);
 
-      const logs = await rpc.getLogs({
+      const logs = await getLogsSafe({
         address: CONTRACT_ADDRESS,
         fromBlock: start,
         toBlock: end,
-        topics: [refTopic0]
+        topics: [regTopic0],
       });
 
-      totalLogs += logs.length;
+      if (!logs) {
+        // quiet stop (keep UI calm)
+        return false;
+      }
 
       for (const lg of logs) {
-        const pr = parseRegisterLog(lg);
+        const pr = parseRegistrationLog(lg);
         if (!pr) continue;
         addEdge(pr.ref, pr.user);
-        parsedEdges++;
       }
+
+      // tiny throttle between chunks
+      await sleep(120);
     }
 
-    return { totalLogs, parsedEdges };
-  }
-
-  function buildTreeForRoot(root: string, maxDepth: number) {
-    const rootL = root.toLowerCase();
-    const q: { addr: string; level: number }[] = [{ addr: rootL, level: 0 }];
-
-    const nodes: TreeNode[] = [];
-    const seen = new Set<string>([rootL]);
-    const levelCount: Record<number, number> = {};
-    const direct = childrenOfRef.current.get(rootL) || [];
-
-    while (q.length) {
-      const cur = q.shift()!;
-      const kids = childrenOfRef.current.get(cur.addr) || [];
-      nodes.push({
-        addr: cur.addr,
-        level: cur.level,
-        parent: parentOfRef.current.get(cur.addr),
-        children: kids
-      });
-
-      if (cur.level > 0) levelCount[cur.level] = (levelCount[cur.level] || 0) + 1;
-      if (cur.level >= maxDepth) continue;
-
-      for (const k of kids) {
-        if (seen.has(k)) continue;
-        seen.add(k);
-        q.push({ addr: k, level: cur.level + 1 });
-      }
-    }
-
-    return { direct: uniq(direct), nodes, levelCount };
+    return true;
   }
 
   function recomputeDisplay() {
     if (!addr) {
       setDirectRefs([]);
-      setTeamNodes([]);
       setLevels({});
       return;
     }
-    const { direct, nodes, levelCount } = buildTreeForRoot(addr, 6);
-    setDirectRefs(direct);
-    setTeamNodes(nodes.filter((n) => n.level > 0));
+    const rootL = addr.toLowerCase();
+    const direct = childrenOfRef.current.get(rootL) || [];
+    setDirectRefs(uniq(direct));
+
+    // Build simple level summary (depth-limited)
+    const maxDepth = 6;
+    const q: { a: string; level: number }[] = direct.map((d) => ({ a: d.toLowerCase(), level: 1 }));
+    const seen = new Set<string>([rootL, ...direct.map((d) => d.toLowerCase())]);
+    const levelCount: Record<number, number> = {};
+
+    while (q.length) {
+      const cur = q.shift()!;
+      levelCount[cur.level] = (levelCount[cur.level] || 0) + 1;
+      if (cur.level >= maxDepth) continue;
+
+      const kids = childrenOfRef.current.get(cur.a) || [];
+      for (const k of kids) {
+        const kl = k.toLowerCase();
+        if (seen.has(kl)) continue;
+        seen.add(kl);
+        q.push({ a: kl, level: cur.level + 1 });
+      }
+    }
+
     setLevels(levelCount);
   }
 
-  /** ========= Scanning actions ========= */
-  async function scanNow(spanOverride?: number) {
+  /** ========= Auto-load cache + silent background refresh ========= */
+  const scanningRef = useRef(false);
+
+  useEffect(() => {
+    setExpanded({}); // reset expands on wallet change
     if (!addr) {
-      setScanStatus("Connect wallet to scan network.");
+      setCacheInfo({ hasCache: false });
+      setDirectRefs([]);
+      setLevels({});
       return;
     }
-    if (scanLoading) return;
-
-    setScanLoading(true);
-    setMsg("");
-
-    try {
-      const latest = await rpc.getBlockNumber();
-
-      const span = Math.max(10_000, Math.min(HARD_MAX_SPAN, spanOverride ?? scanSpan));
-      const from = Math.max(0, latest - span);
-      const to = latest;
-
-      setScanSpan(span);
-      setScanFromBlock(from);
-      setScanToBlock(to);
-      setScanStatus(`Scanning blocks ${from} → ${to}…`);
-
-      // fresh rebuild
-      parentOfRef.current = new Map();
-      childrenOfRef.current = new Map();
-
-      const { totalLogs, parsedEdges } = await scanLogs(from, to);
-
-      setLastScannedBlock(to);
-
-      recomputeDisplay();
-
-      const rootLower = addr.toLowerCase();
-      // Save cache
-      const parentObj: Record<string, string> = {};
-      parentOfRef.current.forEach((v, k) => (parentObj[k] = v));
-      const childObj: Record<string, string[]> = {};
-      childrenOfRef.current.forEach((v, k) => (childObj[k] = v));
-
-      saveCache(rootLower, {
-        contract: CONTRACT_ADDRESS,
-        root: rootLower,
-        scanSpan: span,
-        fromBlock: from,
-        toBlock: to,
-        lastScannedBlock: to,
-        parentOf: parentObj,
-        childrenOf: childObj
-      });
-
-      if (parsedEdges === 0) {
-        setScanStatus(`No Register events found in this window. Try “Load older” or increase scan span.`);
-      } else {
-        const teamSize = Math.max(0, buildTreeForRoot(addr, 6).nodes.length - 1);
-        setScanStatus(`Scan complete: ${parsedEdges} edges from ${totalLogs} logs. Direct: ${directRefs.length}. Team (window): ${teamSize}.`);
-      }
-    } catch (e: any) {
-      setScanStatus("Scan failed.");
-      setMsg(e?.message || "Failed to scan Register events.");
-    } finally {
-      setScanLoading(false);
-    }
-  }
-
-  async function resumeScan() {
-    if (!addr) {
-      setScanStatus("Connect wallet to resume scan.");
-      return;
-    }
-    if (scanLoading) return;
 
     const rootLower = addr.toLowerCase();
     const cached = loadCache(rootLower);
-    if (!cached || !cached.lastScannedBlock) {
-      setScanStatus("No cache found. Run Scan Now first.");
-      return;
-    }
-
-    setScanLoading(true);
-    setMsg("");
-
-    try {
-      const latest = await rpc.getBlockNumber();
-      const from = Math.max(cached.lastScannedBlock + 1, 0);
-      const to = latest;
-
-      if (to <= from) {
-        setScanStatus(`Up to date. Last scanned block: ${cached.lastScannedBlock.toLocaleString()}.`);
-        setScanLoading(false);
-        return;
-      }
-
-      // Hydrate maps from cache, then scan only new blocks
+    if (cached) {
       hydrateMapsFromCache(cached);
-
-      setScanStatus(`Resuming scan: ${from} → ${to}…`);
-
-      const { totalLogs, parsedEdges } = await scanLogs(from, to);
-
-      setScanFromBlock(cached.fromBlock || Math.max(0, latest - (cached.scanSpan || scanSpan)));
-      setScanToBlock(to);
-      setLastScannedBlock(to);
-
       recomputeDisplay();
-
-      // Save updated cache
-      const parentObj: Record<string, string> = {};
-      parentOfRef.current.forEach((v, k) => (parentObj[k] = v));
-      const childObj: Record<string, string[]> = {};
-      childrenOfRef.current.forEach((v, k) => (childObj[k] = v));
-
-      saveCache(rootLower, {
-        contract: CONTRACT_ADDRESS,
-        root: rootLower,
-        scanSpan: cached.scanSpan || scanSpan,
-        fromBlock: cached.fromBlock || scanFromBlock,
-        toBlock: to,
-        lastScannedBlock: to,
-        parentOf: parentObj,
-        childrenOf: childObj
-      });
-
-      setScanStatus(`Resume complete: +${parsedEdges} new edges from ${totalLogs} logs. Now up to block ${to.toLocaleString()}.`);
-    } catch (e: any) {
-      setScanStatus("Resume failed.");
-      setMsg(e?.message || "Failed to resume scan.");
-    } finally {
-      setScanLoading(false);
+    } else {
+      setCacheInfo({ hasCache: false });
+      setDirectRefs([]);
+      setLevels({});
     }
-  }
 
-  async function loadOlder() {
-    const next = Math.min(HARD_MAX_SPAN, scanSpan + STEP_OLDER);
-    setScanSpan(next);
-    await scanNow(next);
-  }
+    // Silent scan (no button) — only when:
+    // - wallet connected
+    // - correct chain
+    // - and not already scanning
+    // - and page is visible
+    const run = async () => {
+      if (!chainOk) return;
+      if (scanningRef.current) return;
+      if (document.visibilityState !== "visible") return;
 
+      scanningRef.current = true;
+
+      try {
+        const latest = await rpc.getBlockNumber();
+
+        // If cache exists: only scan NEW blocks (small, safe).
+        // If no cache: scan a SMALL window (to avoid rate limits) — and if it fails, stay calm.
+        const cached2 = loadCache(rootLower);
+        const from = cached2?.lastScannedBlock ? Math.max(0, cached2.lastScannedBlock + 1) : Math.max(0, latest - 90_000);
+        const to = latest;
+
+        // Hard cap per session to stay safe
+        const MAX_SESSION_SPAN = 120_000;
+        const effectiveFrom = Math.max(0, to - MAX_SESSION_SPAN, from);
+
+        // If nothing to scan, just exit
+        if (to <= effectiveFrom) return;
+
+        // start from cached maps if present
+        if (cached2) hydrateMapsFromCache(cached2);
+        else {
+          parentOfRef.current = new Map();
+          childrenOfRef.current = new Map();
+        }
+
+        setSoftStatus((s) => (s ? s : "Updating network view…"));
+
+        const ok = await scanLogsWindow(effectiveFrom, to);
+
+        // If rate-limited or failed, keep UI calm, keep old cache if any
+        if (!ok) {
+          setSoftStatus(""); // silence
+          return;
+        }
+
+        // Save updated cache
+        const parentObj: Record<string, string> = {};
+        parentOfRef.current.forEach((v, k) => (parentObj[k] = v));
+        const childObj: Record<string, string[]> = {};
+        childrenOfRef.current.forEach((v, k) => (childObj[k] = v));
+
+        saveCache(rootLower, {
+          contract: CONTRACT_ADDRESS,
+          root: rootLower,
+          fromBlock: cached2?.fromBlock ?? effectiveFrom,
+          toBlock: to,
+          lastScannedBlock: to,
+          parentOf: parentObj,
+          childrenOf: childObj,
+          updatedAt: Date.now(),
+        });
+
+        setCacheInfo({ hasCache: true, updatedAt: Date.now() });
+        recomputeDisplay();
+      } catch (e: any) {
+        safeConsoleWarn(e);
+        // No scary UI errors
+      } finally {
+        scanningRef.current = false;
+        setSoftStatus("");
+      }
+    };
+
+    // slight delay after route mount
+    const t = window.setTimeout(run, 900);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addr, chainOk]);
+
+  /** ========= Tree UI ========= */
   function toggleExpand(a: string) {
     const k = a.toLowerCase();
     setExpanded((p) => ({ ...p, [k]: !p[k] }));
   }
 
-  function renderNodeRow(nodeAddr: string, level: number) {
+  function renderNodeRow(nodeAddr: string, level: number): React.ReactNode {
     const kids = childrenOfRef.current.get(nodeAddr) || [];
     const isOpen = Boolean(expanded[nodeAddr]);
     const pad = 10 + level * 14;
@@ -620,10 +622,11 @@ return ev?.topicHash ?? "";
       <div
         key={`${nodeAddr}-${level}`}
         style={{
-          border: "1px solid var(--border)",
-          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,.10)",
+          borderRadius: 16,
           padding: "10px 12px",
-          background: "rgba(255,255,255,.03)"
+          background:
+            "radial-gradient(circle at 18% 10%, rgba(255,90,210,.08), rgba(0,0,0,0) 52%), radial-gradient(circle at 85% 0%, rgba(90,120,255,.08), rgba(0,0,0,0) 55%), rgba(255,255,255,.02)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
@@ -633,7 +636,11 @@ return ev?.topicHash ?? "";
                 className="chip"
                 type="button"
                 onClick={() => (kids.length ? toggleExpand(nodeAddr) : null)}
-                style={{ padding: "6px 10px", opacity: kids.length ? 1 : 0.55, cursor: kids.length ? "pointer" : "default" }}
+                style={{
+                  padding: "6px 10px",
+                  opacity: kids.length ? 1 : 0.55,
+                  cursor: kids.length ? "pointer" : "default",
+                }}
                 title={kids.length ? "Expand/Collapse" : "No children"}
               >
                 <span className="dot" />
@@ -657,7 +664,7 @@ return ev?.topicHash ?? "";
 
           {kids.length ? (
             <span className="chip" style={{ padding: "6px 10px" }}>
-              {isOpen ? "Hide" : "Show"} children
+              {isOpen ? "Hide" : "Show"}
             </span>
           ) : (
             <span className="chip" style={{ padding: "6px 10px", opacity: 0.7 }}>
@@ -668,10 +675,10 @@ return ev?.topicHash ?? "";
 
         {kids.length && isOpen ? (
           <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-            {kids.slice(0, 80).map((k) => renderNodeRow(k, level + 1))}
-            {kids.length > 80 ? (
+            {kids.slice(0, 35).map((k) => renderNodeRow(k, level + 1))}
+            {kids.length > 35 ? (
               <div className="small" style={{ opacity: 0.8 }}>
-                Showing first 80 children only (safety). Tell me if you want pagination.
+                Showing first 35 children (performance).
               </div>
             ) : null}
           </div>
@@ -680,40 +687,6 @@ return ev?.topicHash ?? "";
     );
   }
 
-  /** ========= Load cache on wallet connect ========= */
-  useEffect(() => {
-    if (!addr) return;
-
-    const rootLower = addr.toLowerCase();
-    const cached = loadCache(rootLower);
-    if (!cached) {
-      setScanStatus("No cache yet. Run Scan Now.");
-      return;
-    }
-
-    hydrateMapsFromCache(cached);
-    recomputeDisplay();
-
-    setScanStatus(
-      `Loaded cache: ${cached.fromBlock.toLocaleString()} → ${cached.toBlock.toLocaleString()} (last scanned: ${cached.lastScannedBlock.toLocaleString()}).`
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addr]);
-
-  const walletChip = useMemo(() => {
-    if (!hasWallet()) return <span className="chip">No wallet detected</span>;
-    if (!addr) return <span className="chip">Wallet detected (not connected)</span>;
-    return (
-      <span className="chip">
-        <span className="dot" />
-        <span className="mono">{chainOk ? "BSC" : "Wrong Net"}</span>
-        <span className="mono">{shortAddr(addr)}</span>
-      </span>
-    );
-  }, [addr, chainOk]);
-
-  const teamSize = useMemo(() => teamNodes.length, [teamNodes]);
-
   const levelSummary = useMemo(() => {
     const keys = Object.keys(levels)
       .map((k) => Number(k))
@@ -721,24 +694,40 @@ return ev?.topicHash ?? "";
     return keys.map((k) => ({ level: k, count: levels[k] || 0 }));
   }, [levels]);
 
+  const updatedText = useMemo(() => {
+    if (!cacheInfo.updatedAt) return "—";
+    try {
+      return new Date(cacheInfo.updatedAt).toLocaleString();
+    } catch {
+      return "—";
+    }
+  }, [cacheInfo.updatedAt]);
+
   return (
     <div className="yf-luxe">
       <div className="wrap" style={{ paddingTop: 24, paddingBottom: 18 }}>
-        {/* Header */}
-        <div className="card">
+        {/* HERO */}
+        <div className="card" style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div>
               <div className="small" style={{ letterSpacing: ".22em", textTransform: "uppercase" }}>
                 Network Dashboard
               </div>
-              <h1 style={{ marginTop: 10, marginBottom: 6 }}>Your network. Your rewards.</h1>
+              <h1 style={{ marginTop: 10, marginBottom: 6 }}>Your network. Calm, clean, real.</h1>
               <div className="small">
-                Tree is built from locked event: <span className="mono">Register(user, referrer)</span>.
+                Contract:
+                <a className="chip" href={BSCSCAN_CONTRACT} target="_blank" rel="noreferrer" style={{ marginLeft: 10, textDecoration: "none", fontWeight: 900, padding: "6px 10px" }}>
+                  <span className="dot" /> BscScan
+                </a>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {walletChip}
+              <span className="chip">
+                <span className="dot" />
+                <span className="mono">{addr ? shortAddr(addr) : "Not connected"}</span>
+              </span>
+
               {!addr ? (
                 <button className="btn primary" type="button" onClick={connect}>
                   Connect Wallet
@@ -756,244 +745,91 @@ return ev?.topicHash ?? "";
             </div>
           ) : null}
 
-          {msg ? (
+          {softStatus ? (
             <div className="small" style={{ marginTop: 12 }}>
-              {msg}
+              {softStatus}
             </div>
           ) : null}
         </div>
 
-        {/* Main grid */}
-        <div
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: 14,
-            alignItems: "start"
-          }}
-        >
-          {/* Referral link */}
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Your referral link</h3>
-            <div className="small" style={{ marginTop: 8 }}>
-              Share this link (landing uses <span className="mono">?ref=</span>).
+        {/* TOP CARDS */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginBottom: 14 }}>
+          <GlowCard
+            title="Network Rewards"
+            subtitle={`Available + reserve • ${sym}`}
+            right={
+              registered ? (
+                <span className="chip" style={{ padding: "6px 10px" }}>
+                  Reserve: <span className="mono" style={{ marginLeft: 8 }}>{formatUnits(netReserve, dec)}</span>
+                </span>
+              ) : (
+                <span className="chip" style={{ padding: "6px 10px", opacity: 0.75 }}>Register first</span>
+              )
+            }
+          >
+            <div style={{ fontSize: 28, fontWeight: 1000, letterSpacing: "-0.02em" }}>
+              {addr && registered ? formatUnits(netAvail, dec) : "—"} <span className="small">{sym}</span>
             </div>
+          </GlowCard>
 
-            <div style={{ height: 12 }} />
+          <GlowCard title="Team Snapshot" subtitle="From usersExtra (on-chain)">
+            <div style={{ display: "grid", gap: 10 }}>
+              <StatPill label="Team count" value={addr ? teamCount.toLocaleString() : "—"} />
+              <StatPill label="Directs" value={addr ? directsCount.toLocaleString() : "—"} />
+              <StatPill label="Qualified directs" value={addr ? directsQuali.toLocaleString() : "—"} />
+              <StatPill label="Rank" value={addr ? String(rank || 0) : "—"} />
+            </div>
+          </GlowCard>
 
-            <div
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: 14,
-                background: "rgba(255,255,255,.035)",
-                padding: "12px 12px",
-                overflow: "hidden"
-              }}
-            >
-              <div className="small" style={{ marginBottom: 6 }}>
-                Link
-              </div>
+          <GlowCard
+            title="Your Referral Link"
+            subtitle="Copy & share"
+            right={
+              <button
+                className="btn primary"
+                type="button"
+                onClick={async () => {
+                  const ok = await copyText(addr ? referralUrl : `${origin}/?ref=`);
+                  if (ok) {
+                    setCopied(true);
+                    window.setTimeout(() => setCopied(false), 1400);
+                  }
+                }}
+                disabled={!origin}
+              >
+                {copied ? "✅ Copied" : "Copy"}
+              </button>
+            }
+          >
+            <div style={{ border: "1px solid rgba(255,255,255,.10)", borderRadius: 16, background: "rgba(255,255,255,.02)", padding: "12px 12px" }}>
               <div className="mono" style={{ fontWeight: 1000, wordBreak: "break-all" }}>
                 {addr ? referralUrl : `${origin}/?ref=`}
               </div>
             </div>
+          </GlowCard>
+        </div>
 
-            <div style={{ height: 12 }} />
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="btn primary" type="button" onClick={async () => {
-                const ok = await copyText(addr ? referralUrl : `${origin}/?ref=`);
-                if (ok) {
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1400);
-                }
-              }} disabled={!origin}>
-                {copied ? "✅ Copied" : "Copy Link"}
-              </button>
-
-              {addr ? (
-                <a
-                  className="chip"
-                  href={BSCSCAN_ADDR(addr)}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ textDecoration: "none", fontWeight: 900 }}
-                >
-                  <span className="dot" /> View wallet on BscScan
-                </a>
-              ) : null}
-            </div>
-          </div>
-
-          {/* On-chain rewards */}
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Network rewards (on-chain)</h3>
-
-            {!addr ? (
-              <div className="small">Connect wallet to load your network rewards.</div>
-            ) : !registered ? (
-              <div className="small">Not registered yet. Register on Dashboard first.</div>
-            ) : (
-              <>
-                <div className="small" style={{ marginTop: 8 }}>
-                  Token: <b style={{ color: "var(--text)" as any }}>{sym}</b>
-                </div>
-
-                <div style={{ height: 14 }} />
-
-                <div style={{ display: "grid", gap: 12 }}>
-                  <StatRow label="Available now" value={<span>{formatUnits(netAvail, dec)} {sym}</span>} />
-                  <StatRow label="Reserve included" value={<span>{formatUnits(netReserve, dec)} {sym}</span>} />
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Identity */}
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Your network identity</h3>
-
-            {!addr ? (
-              <div className="small">Connect wallet to load.</div>
-            ) : (
-              <>
-                <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
-                  <StatRow
-                    label="Registered"
-                    value={
-                      <span className="chip" style={{ fontWeight: 900 }}>
-                        <span className="dot" />
-                        {registered ? "Yes" : "No"}
-                      </span>
-                    }
-                  />
-                  <StatRow
-                    label="Referrer"
-                    value={
-                      referrer && referrer !== "0x0000000000000000000000000000000000000000" ? (
-                        <a className="mono" href={BSCSCAN_ADDR(referrer)} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
-                          {shortAddr(referrer)}
-                        </a>
-                      ) : (
-                        <span className="mono">—</span>
-                      )
-                    }
-                  />
-                  <div style={{ height: 2 }} />
-                  <StatRow label="Active deposit" value={<span>{formatUnits(myActiveDeposit, dec)} {sym}</span>} />
-                  <StatRow label="Total deposited" value={<span>{formatUnits(myTotalDeposit, dec)} {sym}</span>} />
-                  <StatRow label="Total withdrawn" value={<span>{formatUnits(myTotalWithdrawn, dec)} {sym}</span>} />
-                </div>
-
-                <div style={{ height: 14 }} />
-
-                <a className="chip" href={BSCSCAN_CONTRACT} target="_blank" rel="noreferrer" style={{ textDecoration: "none", fontWeight: 900 }}>
-                  <span className="dot" /> View contract on BscScan
-                </a>
-              </>
-            )}
-          </div>
-
-          {/* Scan controls + summary */}
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Referral scan (cached + resume)</h3>
-
-            <div className="small" style={{ marginTop: 8 }}>
-              Event locked to <span className="mono">Register</span>. Cache makes loads instant.
-            </div>
-
-            <div style={{ height: 14 }} />
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <span className="chip" style={{ padding: "6px 10px" }}>
-                Window: <span className="mono">{scanSpan.toLocaleString()}</span> blocks
-              </span>
-              {scanFromBlock && scanToBlock ? (
-                <span className="chip" style={{ padding: "6px 10px" }}>
-                  {scanFromBlock.toLocaleString()} → {scanToBlock.toLocaleString()}
-                </span>
-              ) : null}
-              {lastScannedBlock ? (
-                <span className="chip" style={{ padding: "6px 10px" }}>
-                  Last scanned: <span className="mono">{lastScannedBlock.toLocaleString()}</span>
-                </span>
-              ) : null}
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="btn primary" type="button" onClick={() => scanNow()} disabled={!addr || scanLoading}>
-                {scanLoading ? "Working…" : "Scan Now"}
-              </button>
-
-              <button className="btn" type="button" onClick={resumeScan} disabled={!addr || scanLoading}>
-                Resume scan (new blocks)
-              </button>
-
-              <button className="btn" type="button" onClick={loadOlder} disabled={!addr || scanLoading || scanSpan >= HARD_MAX_SPAN}>
-                {scanSpan >= HARD_MAX_SPAN ? "Max window reached" : "Load older (+200k)"}
-              </button>
-
-              <button
-                className="btn"
-                type="button"
-                onClick={() => {
-                  const v = prompt("Enter scan window (blocks), e.g. 200000", String(scanSpan));
-                  if (!v) return;
-                  const n = Math.max(10_000, Math.min(HARD_MAX_SPAN, Number(v)));
-                  if (!Number.isFinite(n)) return;
-                  setScanSpan(n);
-                }}
-                disabled={scanLoading}
-              >
-                Set window
-              </button>
-            </div>
-
-            <div className="small" style={{ marginTop: 12 }}>
-              Status: <b style={{ color: "var(--text)" as any }}>{scanStatus}</b>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <div style={{ display: "grid", gap: 10 }}>
-              <StatRow label="Direct referrals (in cache/window)" value={<span className="mono">{directRefs.length}</span>} />
-              <StatRow label="Team size (in cache/window)" value={<span className="mono">{teamSize}</span>} />
-            </div>
-
-            {levelSummary.length ? (
-              <>
-                <div style={{ height: 14 }} />
-                <div className="small">Levels (in cache/window)</div>
-                <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {levelSummary.map((x) => (
-                    <span key={x.level} className="chip" style={{ padding: "6px 10px" }}>
-                      L{x.level}: <span className="mono">{x.count}</span>
-                    </span>
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-
-          {/* Direct referrals */}
+        {/* DIRECTS + TREE (no buttons, no scary errors) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, alignItems: "start" }}>
           <div className="card">
             <h3 style={{ marginTop: 0 }}>Direct referrals</h3>
-            <div className="small" style={{ marginTop: 8 }}>
-              Users where <span className="mono">referrer == your wallet</span> (from cached/event logs).
-            </div>
+            <div className="small" style={{ marginTop: 8 }}>Built quietly from cached Registration logs.</div>
 
             <div style={{ height: 14 }} />
 
             {!addr ? (
-              <div className="small">Connect wallet to scan.</div>
+              <div className="small">Connect wallet to view.</div>
+            ) : !cacheInfo.hasCache ? (
+              <div className="small" style={{ opacity: 0.85 }}>
+                Your network view will appear automatically once the cache is ready.
+              </div>
             ) : directRefs.length === 0 ? (
-              <div className="small">None found in current cache/window. Try “Load older”.</div>
+              <div className="small" style={{ opacity: 0.85 }}>
+                No direct referrals found in the cached window.
+              </div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {directRefs.slice(0, 120).map((d) => (
+                {directRefs.slice(0, 80).map((d) => (
                   <div
                     key={d}
                     style={{
@@ -1001,10 +837,10 @@ return ev?.topicHash ?? "";
                       justifyContent: "space-between",
                       gap: 12,
                       alignItems: "center",
-                      border: "1px solid var(--border)",
-                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,.10)",
+                      borderRadius: 16,
                       padding: "10px 12px",
-                      background: "rgba(255,255,255,.03)"
+                      background: "rgba(255,255,255,.02)",
                     }}
                   >
                     <a className="mono" href={BSCSCAN_ADDR(d)} target="_blank" rel="noreferrer" style={{ textDecoration: "underline", fontWeight: 1000 }}>
@@ -1019,56 +855,48 @@ return ev?.topicHash ?? "";
             )}
           </div>
 
-          {/* Tree */}
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Network tree</h3>
-            <div className="small" style={{ marginTop: 8 }}>
-              Expand nodes to explore. (Depth limited to 6 for performance.)
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: 6 }}>Network tree</h3>
+                <div className="small">Tap a node to expand. Depth limited to 6.</div>
+              </div>
+
+              {cacheInfo.hasCache && levelSummary.length ? (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  {levelSummary.slice(0, 6).map((x) => (
+                    <span key={x.level} className="chip" style={{ padding: "6px 10px" }}>
+                      L{x.level}: <span className="mono" style={{ marginLeft: 8 }}>{x.count}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <div style={{ height: 14 }} />
 
             {!addr ? (
-              <div className="small">Connect wallet to scan.</div>
+              <div className="small">Connect wallet to view.</div>
+            ) : !cacheInfo.hasCache ? (
+              <div className="small" style={{ opacity: 0.85 }}>
+                Tree will appear automatically when ready.
+                <div className="small" style={{ marginTop: 8, opacity: 0.75 }}>
+                  Last cache update: <span className="mono">{updatedText}</span>
+                </div>
+              </div>
             ) : directRefs.length === 0 ? (
-              <div className="small">No tree in current cache/window. Scan / load older.</div>
+              <div className="small" style={{ opacity: 0.85 }}>
+                No tree available for current cache.
+              </div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {directRefs.slice(0, 40).map((d) => renderNodeRow(d.toLowerCase(), 1))}
-              </div>
-            )}
-
-            <div style={{ height: 14 }} />
-
-            <div className="small">
-              Tip: Use <b>Resume scan</b> daily — it only scans new blocks, so it stays fast.
-            </div>
-          </div>
-
-          {/* Extra raw */}
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Extra (raw on-chain)</h3>
-            <div className="small" style={{ marginTop: 8 }}>
-              Data from <span className="mono">usersExtra(address)</span>.
-            </div>
-
-            <div style={{ height: 14 }} />
-
-            {!addr ? (
-              <div className="small">Connect wallet to load.</div>
-            ) : extra ? (
-              <div style={{ display: "grid", gap: 10 }}>
-                {extra.map((v, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                    <div className="small">Field [{i}]</div>
-                    <div className="mono" style={{ fontWeight: 1000 }}>
-                      {typeof v === "bigint" ? v.toString() : String(v)}
-                    </div>
+                {directRefs.slice(0, 30).map((d) => renderNodeRow(d.toLowerCase(), 1))}
+                {directRefs.length > 30 ? (
+                  <div className="small" style={{ opacity: 0.85 }}>
+                    Showing first 30 directs.
                   </div>
-                ))}
+                ) : null}
               </div>
-            ) : (
-              <div className="small">Not available.</div>
             )}
           </div>
         </div>

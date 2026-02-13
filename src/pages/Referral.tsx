@@ -5,17 +5,14 @@
 // - Wrong network guard (BSC Mainnet)
 // - Contract-truth referral stats (usersExtra + getNetworkRewards)
 // - Premium copy + share (Telegram / X)
-// - v2.1: Animated “growth” counters (smooth count + smooth balance numbers)
+// - v2.2 FIX: usersExtra indexes corrected (teamCount/directsCount)
+// - v2.2 FIX: No scary raw RPC errors shown (sanitized user-facing error)
+// - v2.2 FIX: Live pill readable in Light theme (uses CSS variables)
 // ============================================================================
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrowserProvider, Contract, JsonRpcProvider, formatUnits } from "ethers";
 import { useLocation } from "react-router-dom";
-
-import "../lido-luxury.css";
-import "../luxury.css";
-import "../luxury-themes.css";
-import "../dollardex-blackgold-overrides.css";
 
 /** ========= Config ========= */
 const RPC_URL =
@@ -33,6 +30,10 @@ const rpc = new JsonRpcProvider(RPC_URL);
 const YF_ABI = [
   "function USDT() view returns(address)",
   "function users(address) view returns(address,bool,uint256,uint256,uint256,uint256,uint256)",
+  // usersExtra outputs (per your ABI):
+  // rewardsReferral, rewardsOnboarding, rewardsRank,
+  // reserveDailyCapital, reserveDailyROI, reserveNetwork,
+  // teamCount, directsCount, directsQuali, rank
   "function usersExtra(address) view returns(uint256,uint256,uint256,uint256,uint256,uint256,uint32,uint32,uint32,uint8)",
   "function getNetworkRewards(address) view returns(uint256,uint256)"
 ];
@@ -44,9 +45,6 @@ type Toast = { type: "success" | "error" | "info"; title: string; msg?: string }
 
 function getEthereum(): any {
   return (window as any).ethereum;
-}
-function hasWallet() {
-  return typeof (window as any).ethereum !== "undefined";
 }
 function normalizeChainId(cid: any): number | null {
   if (cid == null) return null;
@@ -68,7 +66,27 @@ function clamp01(x: number) {
   return Math.max(0, Math.min(1, x));
 }
 
-/** ========= Smooth counters (NEW) ========= */
+/** No-scary error message mapper */
+function friendlyError(e: any): string {
+  const raw = String(e?.shortMessage || e?.message || e || "").toLowerCase();
+
+  if (!raw) return "Could not load referral data. Please try again.";
+  if (raw.includes("rate limit") || raw.includes("-32005") || raw.includes("too many requests")) {
+    return "Network is busy right now (RPC rate limit). Please wait a moment and try again.";
+  }
+  if (raw.includes("failed to fetch") || raw.includes("networkerror") || raw.includes("timeout")) {
+    return "Network connection issue. Please try again.";
+  }
+  if (raw.includes("bad_data") || raw.includes("missing response")) {
+    return "RPC provider returned an invalid response. Please retry in a moment.";
+  }
+  if (raw.includes("user rejected") || raw.includes("rejected")) {
+    return "Request was rejected in your wallet.";
+  }
+  return "Could not load referral data. Please try again.";
+}
+
+/** ========= Smooth counters ========= */
 function useAnimatedNumber(target: number, enabled: boolean, duration = 650) {
   const [v, setV] = useState<number>(target);
 
@@ -91,8 +109,7 @@ function useAnimatedNumber(target: number, enabled: boolean, duration = 650) {
 
     const tick = (t: number) => {
       const p = clamp01((t - start) / duration);
-      // easeOutCubic
-      const e = 1 - Math.pow(1 - p, 3);
+      const e = 1 - Math.pow(1 - p, 3); // easeOutCubic
       setV(from + (to - from) * e);
       if (p < 1) raf = requestAnimationFrame(tick);
     };
@@ -113,7 +130,6 @@ function bigintToSafeNumberOrNull(x: bigint) {
 
 function fmtCompact(n: number) {
   if (!Number.isFinite(n)) return "—";
-  // compact-ish without Intl dependencies
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
@@ -153,9 +169,11 @@ function usePrefersReducedMotion() {
 function LivePill({ active, label = "LIVE" }: { active: boolean; label?: string }) {
   const reduced = usePrefersReducedMotion();
   const pulseAnim = reduced ? undefined : { animation: "yfPulse 1.9s ease-in-out infinite" };
-  const baseBg = active ? "rgba(255,88,198,.10)" : "rgba(255,255,255,.05)";
-  const baseBorder = active ? "rgba(255,88,198,.22)" : "rgba(255,255,255,.09)";
-  const dot = active ? "rgba(255,88,198,.95)" : "rgba(255,255,255,.35)";
+
+  // Uses theme tokens (works in Light theme too)
+  const baseBg = active ? "rgba(255,88,198,.10)" : "rgba(0,0,0,.04)";
+  const baseBorder = active ? "rgba(255,88,198,.22)" : "var(--border)";
+  const dot = active ? "rgba(255,88,198,.95)" : "rgba(120,120,120,.55)";
 
   return (
     <>
@@ -178,7 +196,7 @@ function LivePill({ active, label = "LIVE" }: { active: boolean; label?: string 
           borderRadius: 999,
           border: `1px solid ${baseBorder}`,
           background: baseBg,
-          color: "rgba(255,255,255,.82)",
+          color: "var(--text)" as any,
           fontSize: 12,
           fontWeight: 950,
           letterSpacing: ".28px",
@@ -301,7 +319,7 @@ export default function Referral() {
       await syncWalletSilent();
       toast("success", "Wallet connected");
     } catch (e: any) {
-      toast("error", "Connect failed", e?.message || "Could not connect wallet.");
+      toast("error", "Connect failed", friendlyError(e));
     }
   }
 
@@ -371,10 +389,12 @@ export default function Referral() {
       setReferrer(String(u[0]));
       setRegistered(Boolean(u[1]));
 
-      const e0 = BigInt((extra as any)[0] ?? 0);
-      const e1 = BigInt((extra as any)[1] ?? 0);
-      setDirectCount(e0);
-      setTeamCount(e1);
+      // ✅ FIX: usersExtra index mapping (per your ABI)
+      // teamCount = extra[6], directsCount = extra[7]
+      const team = BigInt((extra as any)[6] ?? 0);
+      const directs = BigInt((extra as any)[7] ?? 0);
+      setTeamCount(team);
+      setDirectCount(directs);
 
       setNetAvail(BigInt((netR as any)[0] ?? 0));
       setNetReserve(BigInt((netR as any)[1] ?? 0));
@@ -384,8 +404,8 @@ export default function Referral() {
       setDec(Number(d));
       setSym(String(s));
     } catch (e: any) {
-      console.error(e);
-      setLoadErr(e?.message || "Failed to load referral data.");
+      // Do NOT print scary stuff to UI
+      setLoadErr(friendlyError(e));
     } finally {
       setLoading(false);
     }
@@ -429,7 +449,7 @@ export default function Referral() {
 
   const liveActive = Boolean(addr && registered && chainOk);
 
-  /** ===== Animated “growth” numbers (NEW) ===== */
+  /** ===== Animated numbers ===== */
   const directSafe = bigintToSafeNumberOrNull(directCount);
   const teamSafe = bigintToSafeNumberOrNull(teamCount);
 
@@ -451,14 +471,11 @@ export default function Referral() {
 
   const animatedDirect = useAnimatedNumber(directSafe ?? 0, Boolean(addr && chainOk));
   const animatedTeam = useAnimatedNumber(teamSafe ?? 0, Boolean(addr && chainOk));
-
-  // balances: animate as float (display only)
   const animatedNetAvail = useAnimatedNumber(netAvailFloat, Boolean(addr && registered && chainOk), 750);
   const animatedNetReserve = useAnimatedNumber(netReserveFloat, Boolean(addr && registered && chainOk), 750);
 
   const prettyNetAvail = useMemo(() => {
     if (!addr) return `0 ${sym}`;
-    // show 4 decimals for readability; you can change to 2 if you want
     return `${animatedNetAvail.toFixed(2)} ${sym}`;
   }, [addr, animatedNetAvail, sym]);
 
@@ -532,36 +549,42 @@ export default function Referral() {
                 margin-top: 14px;
               }
               .refKpi {
-                border: 1px solid rgba(255,255,255,.10);
+                border: 1px solid var(--border);
                 background: rgba(255,255,255,.03);
                 border-radius: 16px;
                 padding: 12px 12px;
                 backdrop-filter: blur(12px);
               }
+              html[data-theme="light"] .refKpi {
+                background: rgba(0,0,0,.02);
+              }
               .refKpiLabel {
                 font-size: 11px;
                 letter-spacing: .22em;
                 text-transform: uppercase;
-                color: rgba(255,255,255,.62);
+                color: var(--muted);
               }
               .refKpiValue {
                 margin-top: 8px;
                 font-size: 24px;
                 font-weight: 1000;
                 letter-spacing: -0.02em;
+                color: var(--text);
               }
               .refKpiHint {
                 margin-top: 6px;
                 font-size: 12px;
-                color: rgba(255,255,255,.62);
+                color: var(--muted);
               }
             `}
           </style>
+
           <div className="refHeroGlow" />
 
           <div style={{ position: "relative" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
               <DollarDexLogoMini />
+
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
                 <a className="btn" href={TELEGRAM_COMMUNITY} target="_blank" rel="noreferrer" style={{ fontWeight: 900 }}>
                   Community
@@ -593,11 +616,10 @@ export default function Referral() {
 
             <div style={{ height: 10 }} />
             <div className="refTitle">Invite. Expand. Earn.</div>
-            <div className="small" style={{ marginTop: 8, color: "var(--muted)" as any }}>
+            <div className="small" style={{ marginTop: 8 }}>
               Your referral link is unique to your wallet. All stats are read directly from the contract.
             </div>
 
-            {/* NEW: Growth KPIs (animated) */}
             <div className="refKpiRow">
               <div className="refKpi">
                 <div className="refKpiLabel">Direct referrals</div>
@@ -644,7 +666,6 @@ export default function Referral() {
 
         <div style={{ height: 14 }} />
 
-        {/* Main grid */}
         <div
           style={{
             display: "grid",
@@ -653,7 +674,6 @@ export default function Referral() {
             alignItems: "start"
           }}
         >
-          {/* Link card */}
           <div className="card" style={{ padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <h3 style={{ margin: 0 }}>Your Referral Link</h3>
@@ -704,7 +724,6 @@ export default function Referral() {
             )}
           </div>
 
-          {/* Stats card (detailed) */}
           <div className="card" style={{ padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <h3 style={{ margin: 0 }}>Referral Stats</h3>
@@ -738,7 +757,6 @@ export default function Referral() {
 
         <div style={{ height: 14 }} />
 
-        {/* Footer note */}
         <div className="card" style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>

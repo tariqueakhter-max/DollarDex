@@ -1,10 +1,3 @@
-// src/routes.tsx
-// ============================================================================
-// DollarDex — Routes (FINAL CORRECT STRUCTURE)
-// - NavBar visible on "/" and "/app/*"
-// - App pages nested properly
-// ============================================================================
-
 import { Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "./AppLayout";
 
@@ -15,7 +8,6 @@ import NetworkDashboard from "./pages/NetworkDashboard";
 import ContractPage from "./pages/ContractPage";
 import AboutPage from "./pages/AboutPage";
 
-/* ========= 404 ========= */
 function NotFound() {
   return (
     <div className="yf-luxe">
@@ -32,27 +24,24 @@ function NotFound() {
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Layout wraps EVERYTHING */}
       <Route element={<AppLayout />}>
-
-        {/* Landing now has NavBar */}
+        {/* Landing */}
         <Route path="/" element={<Landing />} />
 
-        {/* App main */}
-        <Route path="/app" element={<Dashboard />} />
+        {/* App group */}
+        <Route path="/app">
+          <Route index element={<Dashboard />} />
+          <Route path="referral" element={<Referral />} />
+          <Route path="network" element={<NetworkDashboard />} />
+          <Route path="contract" element={<ContractPage />} />
+          <Route path="about" element={<AboutPage />} />
 
-        {/* App sub-pages */}
-        <Route path="/app/referral" element={<Referral />} />
-        <Route path="/app/network" element={<NetworkDashboard />} />
-        <Route path="/app/contract" element={<ContractPage />} />
-        <Route path="/app/about" element={<AboutPage />} />
-
-        {/* Safety redirect */}
-        <Route path="/app/dashboard" element={<Navigate to="/app" replace />} />
+          {/* Safety redirect */}
+          <Route path="dashboard" element={<Navigate to="/app" replace />} />
+        </Route>
 
         {/* Global 404 */}
         <Route path="*" element={<NotFound />} />
-
       </Route>
     </Routes>
   );
