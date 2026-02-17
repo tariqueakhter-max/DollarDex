@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { sendTxProtected } from "../wallet/tx";
 import { useLocation } from "react-router-dom";
 import { BrowserProvider, Contract, JsonRpcProvider, Interface, formatUnits, parseUnits } from "ethers";
 
@@ -1026,115 +1027,160 @@ toast("error", "Failed to load on-chain data", String(msg).slice(0, 140));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addr, yfRead]);
 
-  async function runTx(label: string, txPromise: Promise<any>) {
-    try {
-      toast("info", "Transaction sent", label);
-      const tx = await txPromise;
-      await tx.wait();
-      toast("success", "Confirmed", label);
-      await refreshAll();
-      window.setTimeout(() => refreshDepositFeed(), 1500);
-    } catch (e: any) {
-      toast("error", "Transaction failed", e?.reason || e?.message || label);
-    }
+  async function runTx(label: string, makeTx: () => Promise<any>) {
+  try {
+    toast("info", "Transaction sent", label);
+    const tx = await makeTx();
+    await tx.wait();
+    toast("success", "Confirmed", label);
+    await refreshAll();
+    window.setTimeout(() => refreshDepositFeed(), 1500);
+  } catch (e: any) {
+    toast("error", "Transaction failed", e?.message || label); // only safe msg now
+  }
+}
+
+async function onRegister() {
+  if (!addr) return toast("error", "Connect wallet first");
+  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+  if (!refInput || !refInput.startsWith("0x") || refInput.length !== 42) {
+    return toast("error", "Invalid referrer", "Paste a valid 0x… address.");
   }
 
-  async function onRegister() {
-    if (!addr) return toast("error", "Connect wallet first");
-    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-    if (!refInput || !refInput.startsWith("0x") || refInput.length !== 42) {
-      return toast("error", "Invalid referrer", "Paste a valid 0x… address.");
-    }
-    const c = await yfWrite();
-    await runTx("Register", c.register(refInput));
+  const c = await yfWrite();
+  await runTx("Register", () =>
+    sendTxProtected(c, "register", [refInput], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
+  );
+}
+
+async function onDeposit() {
+  if (!addr) return toast("error", "Connect wallet first");
+  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+  if (!registered) return toast("error", "Register first", "You must register a referrer before depositing.");
+  if (!depositInput) return toast("error", "Enter deposit amount");
+
+  const amount = parseUnits(depositInput, dec);
+  if (amount < minDeposit) return toast("error", "Under minimum", `Minimum deposit is ${formatUnits(minDeposit, dec)} ${sym}`);
+  if (positions.length >= Number(maxPositions)) {
+    return toast("error", "Max positions reached", `Maximum positions: ${maxPositions.toString()}`);
   }
 
-  async function onDeposit() {
-    if (!addr) return toast("error", "Connect wallet first");
-    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-    if (!registered) return toast("error", "Register first", "You must register a referrer before depositing.");
-    if (!depositInput) return toast("error", "Enter deposit amount");
+  const ercR = new Contract(usdtAddr, ERC20_ABI, await getRpc());
+  const allowance: bigint = await ercR.allowance(addr, CONTRACT_ADDRESS);
 
-    const amount = parseUnits(depositInput, dec);
-    if (amount < minDeposit) return toast("error", "Under minimum", `Minimum deposit is ${formatUnits(minDeposit, dec)} ${sym}`);
-    if (positions.length >= Number(maxPositions))
-      return toast("error", "Max positions reached", `Maximum positions: ${maxPositions.toString()}`);
-
-    const ercR = new Contract(usdtAddr, ERC20_ABI, await getRpc());
-    const allowance: bigint = await ercR.allowance(addr, CONTRACT_ADDRESS);
-    if (allowance < amount) {
-      const ercW = await usdtWrite();
-      await runTx("Approve USDT", ercW.approve(CONTRACT_ADDRESS, amount));
-    }
-
-    const c = await yfWrite();
-    await runTx("Deposit (new position starts instantly)", c.deposit(amount));
-    setDepositInput("");
+  if (allowance < amount) {
+    const ercW = await usdtWrite();
+    await runTx("Approve USDT", () =>
+      sendTxProtected(
+        ercW,
+        "approve",
+        [CONTRACT_ADDRESS, amount],
+        {},
+        { preflight: true, gasBuffer: 1.15, fallbackGasLimit: 120_000n }
+      )
+    );
   }
 
-  function parseOptionalAmountOrZero(input: string) {
-    const t = (input || "").trim();
-    if (!t) return 0n;
+  const c = await yfWrite();
+  await runTx("Deposit (new position starts instantly)", () =>
+    sendTxProtected(c, "deposit", [amount], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 900_000n })
+  );
+
+  setDepositInput("");
+}
+function parseOptionalAmountOrZero(input: string) {
+  const t = (input || "").trim();
+  if (!t) return 0n;
+  try {
     return parseUnits(t, dec);
+    } catch {
+    toast("error", "Invalid amount", "Use a plain number like 25 or 25.5");
+    return 0n;
   }
 
-  async function onClaimDaily() {
-    if (!addr) return toast("error", "Connect wallet first");
-    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-    if (!registered) return toast("error", "Register first");
-    if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
+}
 
-    const amt = parseOptionalAmountOrZero(dailyActionAmount);
-    if (amt !== 0n && amt < minWithdraw) return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
 
-    const c = await yfWrite();
-    await runTx("Claim Daily", c.claimDailyReward(amt));
-    setDailyActionAmount("");
+async function onClaimDaily() {
+  if (!addr) return toast("error", "Connect wallet first");
+  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+  if (!registered) return toast("error", "Register first");
+  if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
+
+  const amt = parseOptionalAmountOrZero(dailyActionAmount);
+  if (amt !== 0n && amt < minWithdraw) {
+    return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
   }
 
-  async function onCompoundDaily() {
-    if (!addr) return toast("error", "Connect wallet first");
-    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-    if (!registered) return toast("error", "Register first");
-    if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
-    if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
+  const c = await yfWrite();
+  await runTx("Claim Daily", () =>
+    sendTxProtected(c, "claimDailyReward", [amt], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
+  );
 
-    const amt = parseOptionalAmountOrZero(dailyActionAmount);
-    if (amt !== 0n && amt < minDeposit) return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
+  setDailyActionAmount("");
+}
 
-    const c = await yfWrite();
-    await runTx("Compound Daily (creates a new position)", c.compoundDailyReward(amt));
-    setDailyActionAmount("");
+async function onCompoundDaily() {
+  if (!addr) return toast("error", "Connect wallet first");
+  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+  if (!registered) return toast("error", "Register first");
+  if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
+  if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
+
+  const amt = parseOptionalAmountOrZero(dailyActionAmount);
+  if (amt !== 0n && amt < minDeposit) {
+    return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
   }
 
-  async function onClaimNetwork() {
-    if (!addr) return toast("error", "Connect wallet first");
-    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-    if (!registered) return toast("error", "Register first");
-    if (netAvail <= 0n) return toast("error", "No network rewards available yet");
+  const c = await yfWrite();
+  await runTx("Compound Daily (creates a new position)", () =>
+    sendTxProtected(c, "compoundDailyReward", [amt], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 650_000n })
+  );
 
-    const amt = parseOptionalAmountOrZero(netActionAmount);
-    if (amt !== 0n && amt < minWithdraw) return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
+  setDailyActionAmount("");
+}
 
-    const c = await yfWrite();
-    await runTx("Claim Network", c.claimNetworkReward(amt));
-    setNetActionAmount("");
+async function onClaimNetwork() {
+  if (!addr) return toast("error", "Connect wallet first");
+  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+  if (!registered) return toast("error", "Register first");
+  if (netAvail <= 0n) return toast("error", "No network rewards available yet");
+
+  const amt = parseOptionalAmountOrZero(netActionAmount);
+  if (amt !== 0n && amt < minWithdraw) {
+    return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
   }
 
-  async function onCompoundNetwork() {
-    if (!addr) return toast("error", "Connect wallet first");
-    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-    if (!registered) return toast("error", "Register first");
-    if (netAvail <= 0n) return toast("error", "No network rewards available yet");
-    if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
+  const c = await yfWrite();
+  await runTx("Claim Network", () =>
+    sendTxProtected(c, "claimNetworkReward", [amt], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
+  );
 
-    const amt = parseOptionalAmountOrZero(netActionAmount);
-    if (amt !== 0n && amt < minDeposit) return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
+  setNetActionAmount("");
+}
 
-    const c = await yfWrite();
-    await runTx("Compound Network (creates a new position)", c.compoundNetworkReward(amt));
-    setNetActionAmount("");
+async function onCompoundNetwork() {
+  if (!addr) return toast("error", "Connect wallet first");
+  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+  if (!registered) return toast("error", "Register first");
+  if (netAvail <= 0n) return toast("error", "No network rewards available yet");
+  if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
+
+  const amt = parseOptionalAmountOrZero(netActionAmount);
+  if (amt !== 0n && amt < minDeposit) {
+    return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
   }
+
+  const c = await yfWrite();
+  await runTx("Compound Network (creates a new position)", () =>
+    sendTxProtected(c, "compoundNetworkReward", [amt], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 650_000n })
+  );
+
+  setNetActionAmount("");
+}
+
+
+  
 
   /** ===== Next daily unlock timer (pink ring) ===== */
   const nextDailyUnlockSec = useMemo(() => {
