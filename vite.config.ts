@@ -1,30 +1,32 @@
+// vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    hmr: { overlay: false }, // dev only: stops overlay stealing clicks
-  },
-
-  // Optional: makes `npm run preview` accessible on LAN / some setups
-  preview: {
-    port: 4173,
-    strictPort: true,
-    host: true,
-  },
-
   build: {
-    // Keeps build warning quiet if you still have some big chunks,
-    // but we also split vendors below.
-    chunkSizeWarningLimit: 700,
-
+    modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Better caching + smaller initial load
-          react: ["react", "react-dom", "react-router-dom"],
-          ethers: ["ethers"],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+
+          // heavy libs
+          if (id.includes("/node_modules/ethers/")) return "ethers";
+
+          // react core
+          if (
+            id.includes("/node_modules/react/") ||
+            id.includes("/node_modules/react-dom/") ||
+            id.includes("/node_modules/scheduler/")
+          )
+            return "react";
+
+          // router separated (often helps keep react chunk smaller)
+          if (id.includes("/node_modules/react-router/") || id.includes("/node_modules/react-router-dom/")) return "router";
+
+          // everything else
+          return "vendor";
         },
       },
     },

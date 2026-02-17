@@ -499,3 +499,230 @@ html[data-theme="light"] .ddx-btn{
   .ddx-guard { padding: 10px 12px; }
   .ddx-guardActions .ddx-btn { width: 100%; }
 }
+
+.card {
+  transition: transform .18s ease, box-shadow .2s ease, border-color .2s ease;
+}
+@media (hover:hover) and (pointer:fine) {
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 60px rgba(0,0,0,.45);
+    border-color: rgba(255,255,255,.14);
+  }
+}
+
+.btn {
+  transition: transform .14s ease, box-shadow .18s ease;
+}
+.btn:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+/* =========================
+   DollarDex — Ultra Hero Glow
+   ========================= */
+
+/* Put this on a hero container (position:relative) */
+.ddx-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+/* The glow layer behind content */
+.ddx-heroGlow {
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(40px);
+  opacity: 0.85;
+  transform: translateZ(0);
+}
+
+/* Actual content must be above the glow */
+.ddx-hero > .ddx-heroContent {
+  position: relative;
+  z-index: 1;
+}
+
+/* 3 moving gradient orbs */
+.ddx-heroGlow::before,
+.ddx-heroGlow::after {
+  content: "";
+  position: absolute;
+  width: 55%;
+  height: 55%;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%,
+      rgba(255, 88, 198, 0.55),
+      rgba(142, 133, 255, 0.22),
+      rgba(0, 0, 0, 0) 65%);
+  animation: ddxOrbA 10s ease-in-out infinite;
+}
+
+.ddx-heroGlow::after {
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(circle at 40% 35%,
+      rgba(90, 120, 255, 0.50),
+      rgba(246, 208, 122, 0.18),
+      rgba(0, 0, 0, 0) 65%);
+  animation: ddxOrbB 12s ease-in-out infinite;
+}
+
+/* Third orb via inner element */
+.ddx-heroGlow .ddx-orbC {
+  position: absolute;
+  width: 62%;
+  height: 62%;
+  border-radius: 999px;
+  background: radial-gradient(circle at 45% 40%,
+      rgba(246, 208, 122, 0.42),
+      rgba(255, 88, 198, 0.18),
+      rgba(0, 0, 0, 0) 66%);
+  animation: ddxOrbC 14s ease-in-out infinite;
+}
+
+/* Subtle sheen */
+.ddx-heroSheen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    rgba(255,255,255,0) 30%,
+    rgba(255,255,255,0.06) 45%,
+    rgba(255,255,255,0) 60%
+  );
+  background-size: 220% 220%;
+  animation: ddxSheen 6.5s ease-in-out infinite;
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+/* Premium ring border */
+.ddx-heroBorder {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow:
+    0 0 0 1px rgba(255,88,198,0.06) inset,
+    0 0 0 1px rgba(142,133,255,0.05) inset,
+    0 30px 90px rgba(0,0,0,0.45);
+}
+
+/* Animations */
+@keyframes ddxOrbA {
+  0%   { transform: translate(5%, 10%) scale(1.00); }
+  45%  { transform: translate(22%, 0%) scale(1.10); }
+  100% { transform: translate(5%, 10%) scale(1.00); }
+}
+@keyframes ddxOrbB {
+  0%   { transform: translate(55%, 18%) scale(1.00); }
+  50%  { transform: translate(35%, 34%) scale(1.12); }
+  100% { transform: translate(55%, 18%) scale(1.00); }
+}
+@keyframes ddxOrbC {
+  0%   { transform: translate(18%, 55%) scale(1.00); }
+  50%  { transform: translate(36%, 40%) scale(1.14); }
+  100% { transform: translate(18%, 55%) scale(1.00); }
+}
+@keyframes ddxSheen {
+  0% { background-position: 0% 50%; opacity: .35; }
+  50% { background-position: 100% 50%; opacity: .60; }
+  100% { background-position: 0% 50%; opacity: .35; }
+}
+
+/* Mobile: reduce blur/opacity for performance */
+@media (max-width: 640px) {
+  .ddx-heroGlow { filter: blur(28px); opacity: 0.70; }
+  .ddx-heroSheen { opacity: 0.40; }
+}
+
+
+/* =========================================================
+   V4.3 ADDON — PREMIUM NEON EDGE (CSS-only)
+   - Animated gradient ring (no layout, no JS)
+   - Subtle pulse + hue drift
+   - Stays behind content
+========================================================= */
+
+.ddx-neonEdge{
+  position: relative;
+}
+
+/* The ring itself */
+.ddx-neonEdgeRing{
+  position: absolute;
+  inset: -2px;
+  border-radius: 24px;
+  pointer-events: none;
+  z-index: 1;
+
+  /* Gradient ring via mask: */
+  background:
+    conic-gradient(
+      from 0deg,
+      rgba(255,90,210,.0),
+      rgba(255,90,210,.55),
+      rgba(90,120,255,.50),
+      rgba(246,208,122,.42),
+      rgba(90,120,255,.50),
+      rgba(255,90,210,.55),
+      rgba(255,90,210,.0)
+    );
+
+  /* Keep only border area (ring) */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+
+  padding: 2px; /* ring thickness */
+  opacity: .75;
+  filter: blur(.2px);
+  animation: ddxNeonSpin 10s linear infinite, ddxNeonPulse 4.8s ease-in-out infinite;
+}
+
+/* Slight inner glow to feel “premium” */
+.ddx-neonEdgeRing::after{
+  content:"";
+  position:absolute;
+  inset: 10px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255,90,210,.18), transparent 55%),
+    radial-gradient(circle at 82% 22%, rgba(90,120,255,.16), transparent 60%),
+    radial-gradient(circle at 55% 88%, rgba(246,208,122,.12), transparent 62%);
+  opacity: .55;
+  filter: blur(10px);
+}
+
+/* Keep ring under content but above background */
+.ddx-heroCard.ddx-neonEdge > *:not(.ddx-neonEdgeRing){
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes ddxNeonSpin{
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes ddxNeonPulse{
+  0%,100% { opacity: .58; filter: blur(.2px) brightness(1); }
+  45%     { opacity: .92; filter: blur(.35px) brightness(1.12); }
+}
+
+/* Reduced motion safety */
+@media (prefers-reduced-motion: reduce){
+  .ddx-neonEdgeRing{
+    animation: none !important;
+  }
+}
