@@ -156,6 +156,25 @@ function safePct(numer: bigint, denom: bigint) {
   const p = (numer * 10_000n) / denom;
   return Number(p) / 100;
 }
+function formatFixed(value: bigint, decimals: number, dp: number) {
+  const s = formatUnits(value, decimals); // string
+  const [i, f = ""] = s.split(".");
+  const frac = (f + "0".repeat(dp)).slice(0, dp);
+  const intWithSep = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return dp > 0 ? `${intWithSep}.${frac}` : intWithSep;
+}
+
+const fmt2 = (v: bigint, dec: number) => formatFixed(v, dec, 2);
+const fmt4 = (v: bigint, dec: number) => formatFixed(v, dec, 4);
+
+function fmtPct1(num: bigint, den: bigint) {
+  if (den <= 0n) return "0.0%";
+  const x10 = (num * 1000n) / den; // 100.0% => 1000
+  const whole = x10 / 10n;
+  const frac = x10 % 10n;
+  return `${whole.toString()}.${frac.toString()}%`;
+}
+
 
 /** ========= ABIs ========= */
 const YF_ABI = [
@@ -1857,35 +1876,83 @@ async function onCompoundNetwork() {
                   </tr>
                 </thead>
                 <tbody>
-                  {positions.map((p) => {
-                    const step = Number(timeStep || 86400n);
-                    const effectiveNow = Math.min(now, p.endTime);
-                    const elapsed = Math.max(0, effectiveNow - p.startTime);
-                    const daysPassed = Math.floor(elapsed / step);
-                    const windowStart = p.startTime + daysPassed * step;
-                    const nextUnlock = windowStart + step;
-                    const rem = Math.max(0, nextUnlock - now);
 
-                    const active = p.active && now < p.endTime;
 
-                    return (
-                      <tr key={p.index}>
-                        <td><b>#{p.index + 1}</b></td>
-                        <td>{formatUnits(p.amount, dec)} {sym}</td>
-                        <td>{new Date(p.startTime * 1000).toLocaleString()}</td>
-                        <td>{new Date(p.endTime * 1000).toLocaleString()}</td>
-                        <td><b>{formatUnits(p.earned, dec)} {sym}</b></td>
-                        <td>{formatUnits(p.expected, dec)} {sym}</td>
-                        <td><span className="chip mono">{rem === 0 ? "Ready" : fmtCountdown(rem)}</span></td>
-                        <td>
-                          <span className="chip">
-                            <span className="dot" style={{ background: active ? "rgba(255,88,198,.95)" : "rgba(255,107,107,.95)" }} />
-                            {active ? "Active" : "Ended"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+{positions.map((p) => {
+  const stepSec = BigInt(Number(timeStep || 86400n));
+  const stepNum = Number(stepSec);
+
+  const checkpoint = Number((p.lastCheckpoint ?? (p as any).checkpoint ?? p.startTime) as any);
+
+  const nowSec = now;
+  const effectiveNow = Math.min(nowSec, p.endTime);
+
+  const windowStart = checkpoint;
+  const nextUnlock = windowStart + stepNum;
+
+  const rem = Math.max(0, nextUnlock - nowSec);
+  const active = p.active && nowSec < p.endTime;
+
+  // 🟣 24h progress %
+  const progressedSeconds = BigInt(active ? Math.max(0, stepNum - rem) : 0);
+  const progressPct = active ? fmtPct1(progressedSeconds, stepSec) : "—";
+
+  // BigInt-safe live pending accrual
+  const dailyRewardWei = p.expected / 50n;
+  const pendingSeconds = BigInt(active ? Math.max(0, Math.min(effectiveNow, nextUnlock) - windowStart) : 0);
+  const pendingWei = (dailyRewardWei * pendingSeconds) / stepSec;
+
+  const liveEarnedWei = p.earned + pendingWei;
+
+  return (
+    <tr key={p.index}>
+      <td><b>#{p.index + 1}</b></td>
+
+      <td><b>{fmt2(p.amount, dec)} {sym}</b></td>
+
+      <td>{new Date(p.startTime * 1000).toLocaleString()}</td>
+      <td>{new Date(p.endTime * 1000).toLocaleString()}</td>
+
+      <td>
+        <b>{fmt4(liveEarnedWei, dec)} {sym}</b>
+        <div className="small" style={{ opacity: 0.7, marginTop: 2 }}>
+          Stored: {fmt2(p.earned, dec)} {sym}
+        </div>
+      </td>
+
+      <td>{fmt2(p.expected, dec)} {sym}</td>
+
+      <td>
+        <span className="chip mono">{rem === 0 ? "Ready" : fmtCountdown(rem)}</span>
+        <span
+          className="chip mono"
+          style={{
+            marginLeft: 8,
+            borderColor: "rgba(180,110,255,.35)",
+            background: "linear-gradient(90deg, rgba(180,110,255,.14), rgba(0,0,0,0))"
+          }}
+          title="Progress through current 24h unlock window"
+        >
+          🟣 {progressPct}
+        </span>
+      </td>
+
+      <td>
+        <span className="chip">
+          <span
+            className="dot"
+            style={{ background: active ? "rgba(255,88,198,.95)" : "rgba(255,107,107,.95)" }}
+          />
+          {active ? "Active" : "Ended"}
+        </span>
+      </td>
+    </tr>
+  );
+})}
+                  
+
+
+
                 </tbody>
               </table>
             </div>
