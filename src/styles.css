@@ -473,3 +473,29 @@ html[data-theme="light"] .ddx-btn{
     padding-top: 8px !important;
   }
 }
+
+/* Compact NetworkGuard on mobile */
+.ddx-guardWrap { padding: 10px 0; }
+.ddx-guard { border-radius: 16px; padding: 12px 14px; }
+.ddx-guardTitle { font-weight: 800; margin-bottom: 4px; }
+.ddx-guardText { opacity: .85; }
+
+.ddx-guardNote{
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.9);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ddx-guardNoteX{ opacity:.8; font-size: 18px; margin-left: 10px; }
+
+@media (max-width: 680px){
+  .ddx-guardWrap .wrap { padding: 0 12px; }
+  .ddx-guard { padding: 10px 12px; }
+  .ddx-guardActions .ddx-btn { width: 100%; }
+}
