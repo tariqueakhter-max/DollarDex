@@ -1,4 +1,3 @@
-// ============================== PART 1 / 3 ==============================
 // src/pages/Dashboard.tsx
 // ============================================================================
 // DollarDex — Dashboard page (MOBILE POLISHED)
@@ -50,10 +49,10 @@ async function getRpc(): Promise<JsonRpcProvider> {
 
   for (const url of RPC_URLS) {
     try {
-const rpc = new JsonRpcProvider(url, BSC_NETWORK, {
-  batchMaxCount: 1,
-  batchStallTime: 0
-});
+      const rpc = new JsonRpcProvider(url, BSC_NETWORK, {
+        batchMaxCount: 1,
+        batchStallTime: 0
+      });
 
       // force a real call (and avoid auto-detect flakiness)
       const cid = await rpc.send("eth_chainId", []);
@@ -80,9 +79,9 @@ function resetRpc() {
   _rpc = null;
   _rpcUrl = null;
 }
+
 // Serialize eth_getLogs (prevents provider overload / -32005 / BAD_DATA)
 let _logsLock: Promise<any> = Promise.resolve();
-
 function runLogsExclusive<T>(fn: () => Promise<T>): Promise<T> {
   const next = _logsLock.then(fn, fn);
   _logsLock = next.then(
@@ -91,7 +90,6 @@ function runLogsExclusive<T>(fn: () => Promise<T>): Promise<T> {
   );
   return next;
 }
-
 
 /** ========= Utilities ========= */
 function getEthereum(): any {
@@ -156,6 +154,7 @@ function safePct(numer: bigint, denom: bigint) {
   const p = (numer * 10_000n) / denom;
   return Number(p) / 100;
 }
+
 function formatFixed(value: bigint, decimals: number, dp: number) {
   const s = formatUnits(value, decimals); // string
   const [i, f = ""] = s.split(".");
@@ -174,7 +173,6 @@ function fmtPct1(num: bigint, den: bigint) {
   const frac = x10 % 10n;
   return `${whole.toString()}.${frac.toString()}%`;
 }
-
 
 /** ========= ABIs ========= */
 const YF_ABI = [
@@ -330,8 +328,6 @@ function CountdownRing({ label, remainingSec, totalSec }: { label: string; remai
     </div>
   );
 }
-
-// ============================== PART 2 / 3 ==============================
 
 function ProgressBar({ pct }: { pct: number }) {
   const p = Math.max(0, Math.min(100, pct));
@@ -671,26 +667,25 @@ export default function Dashboard() {
   }
 
   async function getDepositLogs(fromBlock: number, toBlock: number) {
-  try {
-    const ev = depositIface.getEvent("Deposit");
-    const topic0 = ev?.topicHash;
-    if (!topic0) return [];
+    try {
+      const ev = depositIface.getEvent("Deposit");
+      const topic0 = ev?.topicHash;
+      if (!topic0) return [];
 
-    return await runLogsExclusive(async () => {
-      const p = await getRpc();
-      return await p.getLogs({
-        address: CONTRACT_ADDRESS,
-        fromBlock,
-        toBlock,
-        topics: [topic0]
+      return await runLogsExclusive(async () => {
+        const p = await getRpc();
+        return await p.getLogs({
+          address: CONTRACT_ADDRESS,
+          fromBlock,
+          toBlock,
+          topics: [topic0]
+        });
       });
-    });
-  } catch {
-    resetRpc();
-    return [];
+    } catch {
+      resetRpc();
+      return [];
+    }
   }
-}
-
 
   async function bootstrapDepositFeed(latest: number) {
     const ranges = [1200, 2500, 5000, 9000, 15000];
@@ -905,8 +900,6 @@ export default function Dashboard() {
     return new Contract(usdtAddr, ERC20_ABI, signer);
   }
 
-// ============================== PART 3 / 3 ==============================
-
   async function refreshAll() {
     try {
       const c = yfRead;
@@ -1027,14 +1020,14 @@ export default function Dashboard() {
       }
     } catch (e: any) {
       console.error(e);
-const msg =
-  e?.shortMessage ||
-  e?.info?.error?.message ||
-  e?.reason ||
-  e?.message ||
-  "Try again.";
+      const msg =
+        e?.shortMessage ||
+        e?.info?.error?.message ||
+        e?.reason ||
+        e?.message ||
+        "Try again.";
 
-toast("error", "Failed to load on-chain data", String(msg).slice(0, 140));
+      toast("error", "Failed to load on-chain data", String(msg).slice(0, 140));
     }
   }
 
@@ -1047,159 +1040,155 @@ toast("error", "Failed to load on-chain data", String(msg).slice(0, 140));
   }, [addr, yfRead]);
 
   async function runTx(label: string, makeTx: () => Promise<any>) {
-  try {
-    toast("info", "Transaction sent", label);
-    const tx = await makeTx();
-    await tx.wait();
-    toast("success", "Confirmed", label);
-    await refreshAll();
-    window.setTimeout(() => refreshDepositFeed(), 1500);
-  } catch (e: any) {
-    toast("error", "Transaction failed", e?.message || label); // only safe msg now
-  }
-}
-
-async function onRegister() {
-  if (!addr) return toast("error", "Connect wallet first");
-  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-  if (!refInput || !refInput.startsWith("0x") || refInput.length !== 42) {
-    return toast("error", "Invalid referrer", "Paste a valid 0x… address.");
+    try {
+      toast("info", "Transaction sent", label);
+      const tx = await makeTx();
+      await tx.wait();
+      toast("success", "Confirmed", label);
+      await refreshAll();
+      window.setTimeout(() => refreshDepositFeed(), 1500);
+    } catch (e: any) {
+      toast("error", "Transaction failed", e?.message || label);
+    }
   }
 
-  const c = await yfWrite();
-  await runTx("Register", () =>
-    sendTxProtected(c, "register", [refInput], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
-  );
-}
+  async function onRegister() {
+    if (!addr) return toast("error", "Connect wallet first");
+    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+    if (!refInput || !refInput.startsWith("0x") || refInput.length !== 42) {
+      return toast("error", "Invalid referrer", "Paste a valid 0x… address.");
+    }
 
-async function onDeposit() {
-  if (!addr) return toast("error", "Connect wallet first");
-  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-  if (!registered) return toast("error", "Register first", "You must register a referrer before depositing.");
-  if (!depositInput) return toast("error", "Enter deposit amount");
-
-  const amount = parseUnits(depositInput, dec);
-  if (amount < minDeposit) return toast("error", "Under minimum", `Minimum deposit is ${formatUnits(minDeposit, dec)} ${sym}`);
-  if (positions.length >= Number(maxPositions)) {
-    return toast("error", "Max positions reached", `Maximum positions: ${maxPositions.toString()}`);
-  }
-
-  const ercR = new Contract(usdtAddr, ERC20_ABI, await getRpc());
-  const allowance: bigint = await ercR.allowance(addr, CONTRACT_ADDRESS);
-
-  if (allowance < amount) {
-    const ercW = await usdtWrite();
-    await runTx("Approve USDT", () =>
-      sendTxProtected(
-        ercW,
-        "approve",
-        [CONTRACT_ADDRESS, amount],
-        {},
-        { preflight: true, gasBuffer: 1.15, fallbackGasLimit: 120_000n }
-      )
+    const c = await yfWrite();
+    await runTx("Register", () =>
+      sendTxProtected(c, "register", [refInput], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
     );
   }
 
-  const c = await yfWrite();
-  await runTx("Deposit (new position starts instantly)", () =>
-    sendTxProtected(c, "deposit", [amount], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 900_000n })
-  );
+  async function onDeposit() {
+    if (!addr) return toast("error", "Connect wallet first");
+    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+    if (!registered) return toast("error", "Register first", "You must register a referrer before depositing.");
+    if (!depositInput) return toast("error", "Enter deposit amount");
 
-  setDepositInput("");
-}
-function parseOptionalAmountOrZero(input: string) {
-  const t = (input || "").trim();
-  if (!t) return 0n;
-  try {
-    return parseUnits(t, dec);
+    const amount = parseUnits(depositInput, dec);
+    if (amount < minDeposit) return toast("error", "Under minimum", `Minimum deposit is ${formatUnits(minDeposit, dec)} ${sym}`);
+    if (positions.length >= Number(maxPositions)) {
+      return toast("error", "Max positions reached", `Maximum positions: ${maxPositions.toString()}`);
+    }
+
+    const ercR = new Contract(usdtAddr, ERC20_ABI, await getRpc());
+    const allowance: bigint = await ercR.allowance(addr, CONTRACT_ADDRESS);
+
+    if (allowance < amount) {
+      const ercW = await usdtWrite();
+      await runTx("Approve USDT", () =>
+        sendTxProtected(
+          ercW,
+          "approve",
+          [CONTRACT_ADDRESS, amount],
+          {},
+          { preflight: true, gasBuffer: 1.15, fallbackGasLimit: 120_000n }
+        )
+      );
+    }
+
+    const c = await yfWrite();
+    await runTx("Deposit (new position starts instantly)", () =>
+      sendTxProtected(c, "deposit", [amount], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 900_000n })
+    );
+
+    setDepositInput("");
+  }
+
+  function parseOptionalAmountOrZero(input: string) {
+    const t = (input || "").trim();
+    if (!t) return 0n;
+    try {
+      return parseUnits(t, dec);
     } catch {
-    toast("error", "Invalid amount", "Use a plain number like 25 or 25.5");
-    return 0n;
+      toast("error", "Invalid amount", "Use a plain number like 25 or 25.5");
+      return 0n;
+    }
   }
 
-}
+  async function onClaimDaily() {
+    if (!addr) return toast("error", "Connect wallet first");
+    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+    if (!registered) return toast("error", "Register first");
+    if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
 
+    const amt = parseOptionalAmountOrZero(dailyActionAmount);
+    if (amt !== 0n && amt < minWithdraw) {
+      return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
+    }
 
-async function onClaimDaily() {
-  if (!addr) return toast("error", "Connect wallet first");
-  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-  if (!registered) return toast("error", "Register first");
-  if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
+    const c = await yfWrite();
+    await runTx("Claim Daily", () =>
+      sendTxProtected(c, "claimDailyReward", [amt], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
+    );
 
-  const amt = parseOptionalAmountOrZero(dailyActionAmount);
-  if (amt !== 0n && amt < minWithdraw) {
-    return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
+    setDailyActionAmount("");
   }
 
-  const c = await yfWrite();
-  await runTx("Claim Daily", () =>
-    sendTxProtected(c, "claimDailyReward", [amt], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
-  );
+  async function onCompoundDaily() {
+    if (!addr) return toast("error", "Connect wallet first");
+    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+    if (!registered) return toast("error", "Register first");
+    if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
+    if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
 
-  setDailyActionAmount("");
-}
+    const amt = parseOptionalAmountOrZero(dailyActionAmount);
+    if (amt !== 0n && amt < minDeposit) {
+      return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
+    }
 
-async function onCompoundDaily() {
-  if (!addr) return toast("error", "Connect wallet first");
-  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-  if (!registered) return toast("error", "Register first");
-  if (dailyAvail <= 0n) return toast("error", "No daily rewards available yet");
-  if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
+    const c = await yfWrite();
+    await runTx("Compound Daily (creates a new position)", () =>
+      sendTxProtected(c, "compoundDailyReward", [amt], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 650_000n })
+    );
 
-  const amt = parseOptionalAmountOrZero(dailyActionAmount);
-  if (amt !== 0n && amt < minDeposit) {
-    return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
+    setDailyActionAmount("");
   }
 
-  const c = await yfWrite();
-  await runTx("Compound Daily (creates a new position)", () =>
-    sendTxProtected(c, "compoundDailyReward", [amt], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 650_000n })
-  );
+  async function onClaimNetwork() {
+    if (!addr) return toast("error", "Connect wallet first");
+    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+    if (!registered) return toast("error", "Register first");
+    if (netAvail <= 0n) return toast("error", "No network rewards available yet");
 
-  setDailyActionAmount("");
-}
+    const amt = parseOptionalAmountOrZero(netActionAmount);
+    if (amt !== 0n && amt < minWithdraw) {
+      return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
+    }
 
-async function onClaimNetwork() {
-  if (!addr) return toast("error", "Connect wallet first");
-  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-  if (!registered) return toast("error", "Register first");
-  if (netAvail <= 0n) return toast("error", "No network rewards available yet");
+    const c = await yfWrite();
+    await runTx("Claim Network", () =>
+      sendTxProtected(c, "claimNetworkReward", [amt], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
+    );
 
-  const amt = parseOptionalAmountOrZero(netActionAmount);
-  if (amt !== 0n && amt < minWithdraw) {
-    return toast("error", "Under minimum", `Minimum claim is ${formatUnits(minWithdraw, dec)} ${sym}`);
+    setNetActionAmount("");
   }
 
-  const c = await yfWrite();
-  await runTx("Claim Network", () =>
-    sendTxProtected(c, "claimNetworkReward", [amt], {}, { preflight: true, gasBuffer: 1.2, fallbackGasLimit: 350_000n })
-  );
+  async function onCompoundNetwork() {
+    if (!addr) return toast("error", "Connect wallet first");
+    if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
+    if (!registered) return toast("error", "Register first");
+    if (netAvail <= 0n) return toast("error", "No network rewards available yet");
+    if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
 
-  setNetActionAmount("");
-}
+    const amt = parseOptionalAmountOrZero(netActionAmount);
+    if (amt !== 0n && amt < minDeposit) {
+      return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
+    }
 
-async function onCompoundNetwork() {
-  if (!addr) return toast("error", "Connect wallet first");
-  if (!chainOk) return toast("error", "Wrong network", "Switch to BSC Mainnet.");
-  if (!registered) return toast("error", "Register first");
-  if (netAvail <= 0n) return toast("error", "No network rewards available yet");
-  if (positions.length >= Number(maxPositions)) return toast("error", "Max positions reached");
+    const c = await yfWrite();
+    await runTx("Compound Network (creates a new position)", () =>
+      sendTxProtected(c, "compoundNetworkReward", [amt], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 650_000n })
+    );
 
-  const amt = parseOptionalAmountOrZero(netActionAmount);
-  if (amt !== 0n && amt < minDeposit) {
-    return toast("error", "Under minimum", `Minimum compound is ${formatUnits(minDeposit, dec)} ${sym}`);
+    setNetActionAmount("");
   }
-
-  const c = await yfWrite();
-  await runTx("Compound Network (creates a new position)", () =>
-    sendTxProtected(c, "compoundNetworkReward", [amt], {}, { preflight: true, gasBuffer: 1.25, fallbackGasLimit: 650_000n })
-  );
-
-  setNetActionAmount("");
-}
-
-
-  
 
   /** ===== Next daily unlock timer (pink ring) ===== */
   const nextDailyUnlockSec = useMemo(() => {
@@ -1256,6 +1245,7 @@ async function onCompoundNetwork() {
   const reasonMinClaim = `Min claim ${minWithdraw ? `${formatUnits(minWithdraw, dec)} ${sym}` : ""}`.trim();
   const reasonMaxPos = "Max positions reached";
 
+  // ✅ FIX 1: dailyDisabledReason existed in UI but missing in code → added
   const dailyDisabledReason =
     !addr
       ? reasonNeedWallet
@@ -1265,10 +1255,26 @@ async function onCompoundNetwork() {
           ? reasonNeedRegister
           : dailyAvail <= 0n
             ? reasonNoRewards
-            : dailyAvail < minWithdraw
+            : (minWithdraw > 0n && dailyAvail < minWithdraw)
               ? reasonMinClaim
               : "";
 
+  const dailyCompoundDisabledReason =
+    !addr
+      ? reasonNeedWallet
+      : !chainOk
+        ? reasonWrongNet
+        : !registered
+          ? reasonNeedRegister
+          : dailyAvail <= 0n
+            ? reasonNoRewards
+            : dailyAvail < minDeposit
+              ? `Min compound ${formatUnits(minDeposit, dec)} ${sym}`
+              : positions.length >= Number(maxPositions)
+                ? reasonMaxPos
+                : "";
+
+  // ✅ FIX 2: netDisabledReason used but missing in your pasted file → added
   const netDisabledReason =
     !addr
       ? reasonNeedWallet
@@ -1278,9 +1284,25 @@ async function onCompoundNetwork() {
           ? reasonNeedRegister
           : netAvail <= 0n
             ? reasonNoRewards
-            : netAvail < minWithdraw
+            : (minWithdraw > 0n && netAvail < minWithdraw)
               ? reasonMinClaim
               : "";
+
+  // ✅ FIX 3: netCompoundDisabledReason for tooltips + correct minimum deposit logic
+  const netCompoundDisabledReason =
+    !addr
+      ? reasonNeedWallet
+      : !chainOk
+        ? reasonWrongNet
+        : !registered
+          ? reasonNeedRegister
+          : netAvail <= 0n
+            ? reasonNoRewards
+            : netAvail < minDeposit
+              ? `Min compound ${formatUnits(minDeposit, dec)} ${sym}`
+              : positions.length >= Number(maxPositions)
+                ? reasonMaxPos
+                : "";
 
   const liveActive = Boolean(addr && registered && chainOk);
 
@@ -1725,7 +1747,11 @@ async function onCompoundNetwork() {
                   />
                   <StatRow label="Total deposited" value={<span>{formatUnits(myTotalDeposit, dec)} {sym}</span>} />
                   <StatRow label="Total withdrawn" value={<span>{formatUnits(myTotalWithdrawn, dec)} {sym}</span>} />
-                  <StatRow label="Total rewards available" value={<span>{formatUnits(myTotalRewardsAvailable, dec)} {sym}</span>} hint="Daily + Network" />
+                  <StatRow
+                    label="Total rewards available"
+                    value={<span>{formatUnits(myTotalRewardsAvailable, dec)} {sym}</span>}
+                    hint="Daily + Network"
+                  />
                   <StatRow label="Base daily projection" value={<span>{formatUnits(baseDailyProjection, dec)} {sym}</span>} hint="capital only" />
                   <div style={{ height: 2 }} />
                   <StatRow label="Active positions" value={activePositionsCount} hint={`${slotsUsedPct.toFixed(1)}% slots used`} />
@@ -1736,8 +1762,7 @@ async function onCompoundNetwork() {
                     <ProgressBar pct={myProgressPct} />
                     <div className="small" style={{ marginTop: 8 }}>
                       Earned{" "}
-                      <b style={{ color: "var(--text)" as any }}>{formatUnits(positionsEarnedSum, dec)} {sym}</b>{" "}
-                      · Expected{" "}
+                      <b style={{ color: "var(--text)" as any }}>{formatUnits(positionsEarnedSum, dec)} {sym}</b> · Expected{" "}
                       <b style={{ color: "var(--text)" as any }}>{formatUnits(positionsExpectedSum, dec)} {sym}</b>
                     </div>
                   </div>
@@ -1755,7 +1780,15 @@ async function onCompoundNetwork() {
               <h3 style={{ margin: 0 }}>Daily Rewards</h3>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {addr && registered && chainOk && myActiveDeposit > 0n ? (
-                  <GoldAccrualRing label="Today" nowSec={now} dailyAmount={totalDailyProjection} decimals={dec} symbol={sym} size={44} stroke={6} />
+                  <GoldAccrualRing
+                    label="Today"
+                    nowSec={now}
+                    dailyAmount={totalDailyProjection}
+                    decimals={dec}
+                    symbol={sym}
+                    size={44}
+                    stroke={6}
+                  />
                 ) : null}
                 <LivePill active={liveActive} />
               </div>
@@ -1768,8 +1801,7 @@ async function onCompoundNetwork() {
               {formatUnits(smoothDaily, dec)} {sym}
             </div>
             <div className="small" style={{ marginTop: 8 }}>
-              Reserve included:{" "}
-              <b style={{ color: "var(--text)" as any }}>{formatUnits(dailyReserve, dec)} {sym}</b>
+              Reserve included: <b style={{ color: "var(--text)" as any }}>{formatUnits(dailyReserve, dec)} {sym}</b>
             </div>
 
             <div style={{ height: 14 }} />
@@ -1800,11 +1832,19 @@ async function onCompoundNetwork() {
                 disabled={!addr || !registered || !chainOk || dailyAvail <= 0n || (minWithdraw > 0n && dailyAvail < minWithdraw)}
                 disabledReason={dailyDisabledReason}
               />
+
               <ActionButton
                 label="Compound Daily"
                 onClick={onCompoundDaily}
-                disabled={!addr || !registered || !chainOk || dailyAvail <= 0n || (minWithdraw > 0n && dailyAvail < minWithdraw) || positions.length >= Number(maxPositions)}
-                disabledReason={positions.length >= Number(maxPositions) ? reasonMaxPos : dailyDisabledReason}
+                disabled={
+                  !addr ||
+                  !registered ||
+                  !chainOk ||
+                  dailyAvail <= 0n ||
+                  dailyAvail < minDeposit || // ✅ compound uses MINIMUM_DEPOSIT
+                  positions.length >= Number(maxPositions)
+                }
+                disabledReason={dailyCompoundDisabledReason}
               />
             </div>
           </div>
@@ -1823,8 +1863,7 @@ async function onCompoundNetwork() {
               {formatUnits(smoothNet, dec)} {sym}
             </div>
             <div className="small" style={{ marginTop: 8 }}>
-              Reserve included:{" "}
-              <b style={{ color: "var(--text)" as any }}>{formatUnits(netReserve, dec)} {sym}</b>
+              Reserve included: <b style={{ color: "var(--text)" as any }}>{formatUnits(netReserve, dec)} {sym}</b>
             </div>
 
             <div style={{ height: 14 }} />
@@ -1841,11 +1880,20 @@ async function onCompoundNetwork() {
                 disabled={!addr || !registered || !chainOk || netAvail <= 0n || (minWithdraw > 0n && netAvail < minWithdraw)}
                 disabledReason={netDisabledReason}
               />
+
+              {/* ✅ FIX: Compound Network must use MINIMUM_DEPOSIT (not MINIMUM_WITHDRAW) */}
               <ActionButton
                 label="Compound Network"
                 onClick={onCompoundNetwork}
-                disabled={!addr || !registered || !chainOk || netAvail <= 0n || (minWithdraw > 0n && netAvail < minWithdraw) || positions.length >= Number(maxPositions)}
-                disabledReason={positions.length >= Number(maxPositions) ? reasonMaxPos : netDisabledReason}
+                disabled={
+                  !addr ||
+                  !registered ||
+                  !chainOk ||
+                  netAvail <= 0n ||
+                  netAvail < minDeposit ||
+                  positions.length >= Number(maxPositions)
+                }
+                disabledReason={netCompoundDisabledReason}
               />
             </div>
           </div>
@@ -1876,83 +1924,77 @@ async function onCompoundNetwork() {
                   </tr>
                 </thead>
                 <tbody>
+                  {positions.map((p) => {
+                    const stepSec = BigInt(Number(timeStep || 86400n));
+                    const stepNum = Number(stepSec);
 
+                    const checkpoint = Number((p.lastCheckpoint ?? (p as any).checkpoint ?? p.startTime) as any);
 
-{positions.map((p) => {
-  const stepSec = BigInt(Number(timeStep || 86400n));
-  const stepNum = Number(stepSec);
+                    const nowSec = now;
+                    const effectiveNow = Math.min(nowSec, p.endTime);
 
-  const checkpoint = Number((p.lastCheckpoint ?? (p as any).checkpoint ?? p.startTime) as any);
+                    const windowStart = checkpoint;
+                    const nextUnlock = windowStart + stepNum;
 
-  const nowSec = now;
-  const effectiveNow = Math.min(nowSec, p.endTime);
+                    const rem = Math.max(0, nextUnlock - nowSec);
+                    const active = p.active && nowSec < p.endTime;
 
-  const windowStart = checkpoint;
-  const nextUnlock = windowStart + stepNum;
+                    // 🟣 24h progress %
+                    const progressedSeconds = BigInt(active ? Math.max(0, stepNum - rem) : 0);
+                    const progressPct = active ? fmtPct1(progressedSeconds, stepSec) : "—";
 
-  const rem = Math.max(0, nextUnlock - nowSec);
-  const active = p.active && nowSec < p.endTime;
+                    // BigInt-safe live pending accrual
+                    const dailyRewardWei = p.expected / 50n;
+                    const pendingSeconds = BigInt(active ? Math.max(0, Math.min(effectiveNow, nextUnlock) - windowStart) : 0);
+                    const pendingWei = (dailyRewardWei * pendingSeconds) / stepSec;
 
-  // 🟣 24h progress %
-  const progressedSeconds = BigInt(active ? Math.max(0, stepNum - rem) : 0);
-  const progressPct = active ? fmtPct1(progressedSeconds, stepSec) : "—";
+                    const liveEarnedWei = p.earned + pendingWei;
 
-  // BigInt-safe live pending accrual
-  const dailyRewardWei = p.expected / 50n;
-  const pendingSeconds = BigInt(active ? Math.max(0, Math.min(effectiveNow, nextUnlock) - windowStart) : 0);
-  const pendingWei = (dailyRewardWei * pendingSeconds) / stepSec;
+                    return (
+                      <tr key={p.index}>
+                        <td><b>#{p.index + 1}</b></td>
 
-  const liveEarnedWei = p.earned + pendingWei;
+                        <td><b>{fmt2(p.amount, dec)} {sym}</b></td>
 
-  return (
-    <tr key={p.index}>
-      <td><b>#{p.index + 1}</b></td>
+                        <td>{new Date(p.startTime * 1000).toLocaleString()}</td>
+                        <td>{new Date(p.endTime * 1000).toLocaleString()}</td>
 
-      <td><b>{fmt2(p.amount, dec)} {sym}</b></td>
+                        <td>
+                          <b>{fmt4(liveEarnedWei, dec)} {sym}</b>
+                          <div className="small" style={{ opacity: 0.7, marginTop: 2 }}>
+                            Stored: {fmt2(p.earned, dec)} {sym}
+                          </div>
+                        </td>
 
-      <td>{new Date(p.startTime * 1000).toLocaleString()}</td>
-      <td>{new Date(p.endTime * 1000).toLocaleString()}</td>
+                        <td>{fmt2(p.expected, dec)} {sym}</td>
 
-      <td>
-        <b>{fmt4(liveEarnedWei, dec)} {sym}</b>
-        <div className="small" style={{ opacity: 0.7, marginTop: 2 }}>
-          Stored: {fmt2(p.earned, dec)} {sym}
-        </div>
-      </td>
+                        <td>
+                          <span className="chip mono">{rem === 0 ? "Ready" : fmtCountdown(rem)}</span>
+                          <span
+                            className="chip mono"
+                            style={{
+                              marginLeft: 8,
+                              borderColor: "rgba(180,110,255,.35)",
+                              background: "linear-gradient(90deg, rgba(180,110,255,.14), rgba(0,0,0,0))"
+                            }}
+                            title="Progress through current 24h unlock window"
+                          >
+                            🟣 {progressPct}
+                          </span>
+                        </td>
 
-      <td>{fmt2(p.expected, dec)} {sym}</td>
-
-      <td>
-        <span className="chip mono">{rem === 0 ? "Ready" : fmtCountdown(rem)}</span>
-        <span
-          className="chip mono"
-          style={{
-            marginLeft: 8,
-            borderColor: "rgba(180,110,255,.35)",
-            background: "linear-gradient(90deg, rgba(180,110,255,.14), rgba(0,0,0,0))"
-          }}
-          title="Progress through current 24h unlock window"
-        >
-          🟣 {progressPct}
-        </span>
-      </td>
-
-      <td>
-        <span className="chip">
-          <span
-            className="dot"
-            style={{ background: active ? "rgba(255,88,198,.95)" : "rgba(255,107,107,.95)" }}
-          />
-          {active ? "Active" : "Ended"}
-        </span>
-      </td>
-    </tr>
-  );
-})}
-                  
-
-
-
+                        <td>
+                          <span className="chip">
+                            <span
+                              className="dot"
+                              style={{ background: active ? "rgba(255,88,198,.95)" : "rgba(255,107,107,.95)" }}
+                            />
+                            {active ? "Active" : "Ended"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
